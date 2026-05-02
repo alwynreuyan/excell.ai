@@ -1,85 +1,1944 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VoiceRelay — ESP32 Control</title>
-    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;500;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoiceRelay — Smart Home</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;500;700;900&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;500;700;900&family=Rajdhani:wght@400;600;700&display=swap');
+
+
+:root {
+
+  --bg:        #080c12;
+  --bg2:       #0d1520;
+  --panel:     #0d1520;
+  --panel2:    #111d2e;
+  --border:    #1a2d45;
+  --border2:   #233a56;
+  --accent:    #00d4ff;
+  --accent2:   #ff6b35;
+  --green:     #00ff88;
+  --red:       #ff3b5c;
+  --yellow:    #ffd166;
+  --muted:     #4a6580;
+  --text:      #c8dff0;
+  --text2:     #8aacc8;
+  --white:     #ffffff;
+  --mono:      'Share Tech Mono', monospace;
+  --sans:      'Exo 2', sans-serif;
+  --ui:        'Rajdhani', sans-serif;
+  --radius:    12px;
+  --radius-sm: 7px;
+  --transition: .22s cubic-bezier(.4,0,.2,1);
+  --shadow:    0 4px 24px rgba(0,0,0,0.5);
+  --glow:      0 0 20px rgba(0,212,255,0.25);
+}
+
+/* ── Theme: Ocean Blue ── */
+[data-theme="ocean"] {
+  --bg:       #030d1a;
+  --bg2:      #071626;
+  --panel:    #071626;
+  --panel2:   #0a1f35;
+  --border:   #0e2d4a;
+  --border2:  #154060;
+  --accent:   #0af5d8;
+  --accent2:  #ff9f43;
+  --green:    #26de81;
+  --red:      #fc5c65;
+  --muted:    #305a78;
+  --text:     #9fd3e8;
+}
+
+/* ── Theme: Warm Amber ── */
+[data-theme="amber"] {
+  --bg:       #0f0a00;
+  --bg2:      #1a1200;
+  --panel:    #1a1200;
+  --panel2:   #231800;
+  --border:   #3d2800;
+  --border2:  #5a3d00;
+  --accent:   #ffa726;
+  --accent2:  #ef5350;
+  --green:    #66bb6a;
+  --red:      #ef5350;
+  --muted:    #6d4c0a;
+  --text:     #ffe082;
+  --text2:    #d4a017;
+}
+
+/* ── Theme: Forest Green ── */
+[data-theme="forest"] {
+  --bg:       #030f06;
+  --bg2:      #061a0a;
+  --panel:    #061a0a;
+  --panel2:   #0a2310;
+  --border:   #123b1a;
+  --border2:  #1a5227;
+  --accent:   #4caf50;
+  --accent2:  #ff9800;
+  --green:    #69f0ae;
+  --red:      #f44336;
+  --muted:    #2e5c35;
+  --text:     #a5d6a7;
+}
+
+/* ── Theme: Purple Dusk ── */
+[data-theme="purple"] {
+  --bg:       #0a0611;
+  --bg2:      #120d1e;
+  --panel:    #120d1e;
+  --panel2:   #1a1229;
+  --border:   #2d1f4a;
+  --border2:  #3d2b60;
+  --accent:   #b388ff;
+  --accent2:  #ff80ab;
+  --green:    #69f0ae;
+  --red:      #ff5252;
+  --muted:    #4a3070;
+  --text:     #ce93d8;
+}
+
+/* ── Theme: Light Mode ── */
+[data-theme="light"] {
+  --bg:       #f0f4f8;
+  --bg2:      #ffffff;
+  --panel:    #ffffff;
+  --panel2:   #f7fafc;
+  --border:   #dce6f0;
+  --border2:  #c4d6e8;
+  --accent:   #0078d4;
+  --accent2:  #d83b01;
+  --green:    #107c10;
+  --red:      #d83b01;
+  --muted:    #9aaebb;
+  --text:     #1e3a5f;
+  --text2:    #4a6580;
+  --white:    #1e3a5f;
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+  transition: background var(--transition), color var(--transition);
+}
+
+/* ── Grid Background ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px);
+  background-size: 44px 44px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 1;
+  transition: opacity var(--transition);
+}
+[data-theme="light"] body::before { opacity: 0.3; }
+
+/* ── Layout ── */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 64px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  gap: 6px;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 100;
+  transition: width var(--transition), background var(--transition);
+}
+.sidebar.expanded { width: 200px; align-items: flex-start; }
+
+.sidebar-logo {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  border: 1.5px solid var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--glow);
+  margin-bottom: 8px;
+  flex-shrink: 0;
+  animation: pulse-ring 3s ease-in-out infinite;
+}
+.sidebar.expanded .sidebar-logo { margin-left: 12px; }
+@keyframes pulse-ring {
+  0%,100% { box-shadow: 0 0 10px rgba(0,212,255,0.2); }
+  50%      { box-shadow: 0 0 22px rgba(0,212,255,0.6); }
+}
+.sidebar-logo svg { width: 20px; height: 20px; fill: var(--accent); }
+
+.nav-item {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: var(--muted);
+  transition: all var(--transition);
+  position: relative;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+.sidebar.expanded .nav-item {
+  width: calc(100% - 16px);
+  margin: 0 8px;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 10px;
+}
+.nav-item svg { width: 20px; height: 20px; flex-shrink: 0; }
+.nav-item .nav-label {
+  font-family: var(--ui);
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  display: none;
+}
+.sidebar.expanded .nav-item .nav-label { display: block; }
+.nav-item:hover { color: var(--accent); background: rgba(0,212,255,0.07); border-color: var(--border); }
+.nav-item.active { color: var(--accent); background: rgba(0,212,255,0.12); border-color: rgba(0,212,255,0.3); }
+.nav-divider { width: 36px; height: 1px; background: var(--border); margin: 6px 0; }
+.sidebar.expanded .nav-divider { width: calc(100% - 24px); margin: 6px 12px; }
+.sidebar-spacer { flex: 1; }
+
+/* ── Main Content ── */
+.main-content {
+  flex: 1;
+  margin-left: 64px;
+  position: relative;
+  z-index: 1;
+  transition: margin-left var(--transition);
+}
+
+.container {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+
+/* ── Topbar ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 14px 18px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.topbar-title {
+  font-family: var(--ui);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--white);
+  flex: 1;
+}
+.topbar-title span { color: var(--accent); }
+.topbar-time {
+  font-family: var(--mono);
+  font-size: .75rem;
+  color: var(--muted);
+}
+
+/* ── Stats Row ── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+@media (max-width: 640px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
+
+.stat-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color var(--transition);
+}
+.stat-card:hover { border-color: var(--border2); }
+.stat-label {
+  font-family: var(--mono);
+  font-size: .62rem;
+  color: var(--muted);
+  letter-spacing: .12em;
+}
+.stat-value {
+  font-family: var(--ui);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--white);
+  line-height: 1;
+}
+.stat-value.accent { color: var(--accent); }
+.stat-value.green  { color: var(--green); }
+.stat-sub {
+  font-size: .68rem;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+/* ── Section Title ── */
+.section-title {
+  font-family: var(--mono);
+  font-size: .66rem;
+  color: var(--muted);
+  letter-spacing: .16em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── IP Bar ── */
+.ip-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.ip-label {
+  font-family: var(--mono);
+  font-size: .7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ip-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: .82rem;
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition);
+  min-width: 0;
+}
+.ip-input:focus { border-color: var(--accent); }
+.conn-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background .4s, box-shadow .4s;
+  flex-shrink: 0;
+}
+.conn-dot.ok  { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.conn-dot.err { background: var(--red);   box-shadow: 0 0 8px var(--red); }
+.check-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: .7rem;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.check-btn:hover { border-color: var(--accent); color: var(--accent); }
+.conn-label {
+  font-family: var(--mono);
+  font-size: .68rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── Voice Panel ── */
+.voice-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 560px) {
+  .voice-panel { grid-template-columns: 1fr; }
+  .mic-area { align-items: center; }
+}
+
+.mic-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.mic-outer {
+  position: relative;
+  width: 110px; height: 110px;
+  display: flex; align-items: center; justify-content: center;
+}
+.mic-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  transition: border-color .3s;
+}
+.mic-ring.r2 { inset: -11px; border-color: rgba(0,212,255,0.1); }
+.mic-ring.r3 { inset: -22px; border-color: rgba(0,212,255,0.05); }
+
+.mic-btn {
+  width: 84px; height: 84px;
+  border-radius: 50%;
+  background: var(--panel2);
+  border: 2px solid var(--border);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .25s;
+  position: relative; z-index: 1;
+}
+.mic-btn svg { width: 32px; height: 32px; fill: var(--muted); transition: fill .25s; }
+.mic-btn:hover { border-color: var(--accent); }
+.mic-btn:hover svg { fill: var(--accent); }
+.mic-btn.listening {
+  border-color: var(--red);
+  background: rgba(255,59,92,0.1);
+  box-shadow: 0 0 28px rgba(255,59,92,0.4);
+  animation: mic-throb 1s ease-in-out infinite;
+}
+.mic-btn.listening svg { fill: var(--red); }
+@keyframes mic-throb {
+  0%,100% { box-shadow: 0 0 18px rgba(255,59,92,0.3); }
+  50%      { box-shadow: 0 0 38px rgba(255,59,92,0.65); }
+}
+
+.mic-label {
+  font-family: var(--mono);
+  font-size: .63rem;
+  color: var(--muted);
+  letter-spacing: .1em;
+  text-align: center;
+}
+
+/* ── Voice Info ── */
+.voice-info { display: flex; flex-direction: column; gap: 12px; }
+
+.status-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+}
+.status-label {
+  font-family: var(--mono);
+  font-size: .62rem;
+  color: var(--muted);
+  letter-spacing: .14em;
+  margin-bottom: 3px;
+}
+#status-text {
+  font-size: .86rem;
+  font-weight: 500;
+  color: var(--text);
+  min-height: 1.2em;
+  transition: color .3s;
+}
+#status-text.ok   { color: var(--green); }
+#status-text.err  { color: var(--red); }
+#status-text.info { color: var(--accent); }
+#transcript-text {
+  font-family: var(--mono);
+  font-size: .72rem;
+  color: var(--accent2);
+  margin-top: 4px;
+  min-height: 1em;
+  font-style: italic;
+}
+
+/* ── AI Response Box ── */
+.ai-response-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  min-height: 60px;
+  position: relative;
+}
+.ai-response-label {
+  font-family: var(--mono);
+  font-size: .62rem;
+  color: var(--muted);
+  letter-spacing: .14em;
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ai-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: ai-blink 2s ease-in-out infinite;
+}
+@keyframes ai-blink {
+  0%,100% { opacity: .3; }
+  50%      { opacity: 1; }
+}
+#ai-response-text {
+  font-size: .84rem;
+  color: var(--text);
+  line-height: 1.55;
+  min-height: 1.2em;
+}
+#ai-response-text.speaking { color: var(--accent); }
+
+.tts-controls {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.tts-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: .65rem;
+  padding: 4px 9px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition);
+  letter-spacing: .06em;
+}
+.tts-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tts-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.07); }
+
+.voice-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.voice-chip {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: .63rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.voice-chip:hover { border-color: var(--accent2); color: var(--accent2); }
+.voice-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.07); }
+
+/* ── Quick Commands ── */
+.chips-section { margin-bottom: 20px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  font-family: var(--mono);
+  font-size: .7rem;
+  padding: 5px 11px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all var(--transition);
+  user-select: none;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.06); }
+.chip:active { transform: scale(.96); }
+.chip.active { border-color: var(--accent2); color: var(--accent2); }
+
+/* ── Relay Grid ── */
+.relays-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.relay-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+.relay-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--border);
+  transition: background var(--transition);
+}
+.relay-card.on { border-color: rgba(0,255,136,0.3); box-shadow: 0 0 20px rgba(0,255,136,0.06); }
+.relay-card.on::before { background: var(--green); }
+
+.relay-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.relay-name {
+  font-size: .9rem;
+  font-weight: 700;
+  font-family: var(--ui);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--white);
+  line-height: 1.2;
+}
+.relay-desc {
+  font-size: .66rem;
+  color: var(--muted);
+  font-family: var(--mono);
+  margin-top: 2px;
+}
+.relay-icon-wrap {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.relay-card.on .relay-icon-wrap { border-color: rgba(0,255,136,0.3); box-shadow: 0 0 10px rgba(0,255,136,0.15); }
+
+.relay-state {
+  font-family: var(--mono);
+  font-size: .66rem;
+  color: var(--muted);
+  letter-spacing: .12em;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.relay-state-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background var(--transition), box-shadow var(--transition);
+}
+.relay-card.on .relay-state-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.relay-card.on .relay-state { color: var(--green); }
+
+/* Toggle */
+.toggle-wrap { display: flex; align-items: center; gap: 10px; }
+.toggle-label { font-family: var(--mono); font-size: .7rem; color: var(--muted); transition: color var(--transition); }
+.relay-card.on .toggle-label { color: var(--green); }
+.toggle { position: relative; width: 50px; height: 25px; cursor: pointer; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-track {
+  position: absolute; inset: 0;
+  background: var(--border2);
+  border-radius: 13px;
+  transition: background .3s;
+}
+.toggle input:checked + .toggle-track { background: var(--green); }
+.toggle-thumb {
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 19px; height: 19px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform .3s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+}
+.toggle input:checked ~ .toggle-thumb { transform: translateX(25px); }
+
+/* Relay Buttons */
+.relay-btns { display: flex; gap: 5px; }
+.rbtn {
+  flex: 1;
+  padding: 6px 0;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-family: var(--mono);
+  font-size: .66rem;
+  cursor: pointer;
+  letter-spacing: .06em;
+  transition: all var(--transition);
+  color: var(--muted);
+}
+.rbtn:hover { color: var(--white); border-color: var(--border2); }
+.rbtn.on  { border-color: rgba(0,255,136,0.4); color: var(--green); }
+.rbtn.off { border-color: rgba(255,59,92,0.4);  color: var(--red); }
+.rbtn.on:hover  { background: rgba(0,255,136,0.08); }
+.rbtn.off:hover { background: rgba(255,59,92,0.08); }
+
+/* Delete relay btn */
+.relay-delete {
+  position: absolute;
+  top: 10px; right: 10px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: .7rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: all var(--transition);
+}
+.relay-card:hover .relay-delete { opacity: 1; }
+.relay-delete:hover { border-color: var(--red); color: var(--red); background: rgba(255,59,92,0.1); }
+
+/* Add Relay Card */
+.relay-card.add-card {
+  border-style: dashed;
+  border-color: var(--border);
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  cursor: pointer;
+  background: transparent;
+  transition: all var(--transition);
+}
+.relay-card.add-card:hover { border-color: var(--accent); background: rgba(0,212,255,0.03); }
+.add-card-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  color: var(--muted);
+}
+.add-card-inner svg { width: 28px; height: 28px; }
+.add-card-inner span {
+  font-family: var(--mono);
+  font-size: .68rem;
+  letter-spacing: .1em;
+}
+.relay-card.add-card:hover .add-card-inner { color: var(--accent); }
+
+/* ── All Controls ── */
+.all-ctrl { display: flex; gap: 8px; margin-bottom: 22px; flex-wrap: wrap; }
+.all-btn {
+  flex: 1;
+  min-width: 100px;
+  padding: 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  font-family: var(--mono);
+  font-size: .74rem;
+  cursor: pointer;
+  letter-spacing: .08em;
+  color: var(--muted);
+  transition: all var(--transition);
+}
+.all-btn:hover { color: var(--white); }
+.all-btn.all-on:hover  { border-color: var(--green); color: var(--green); background: rgba(0,255,136,0.07); }
+.all-btn.all-off:hover { border-color: var(--red);   color: var(--red);   background: rgba(255,59,92,0.07); }
+.all-btn.all-tog:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.07); }
+
+/* ── Log ── */
+.log-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  height: 140px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: .68rem;
+  line-height: 1.75;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
+}
+.log-entry .ts { color: var(--border2); margin-right: 8px; }
+.log-entry.ok   .msg { color: var(--green); }
+.log-entry.err  .msg { color: var(--red); }
+.log-entry.info .msg { color: var(--accent); }
+.log-entry.voice .msg { color: var(--accent2); }
+.log-entry.ai   .msg { color: #b388ff; }
+
+/* ── Chrome Warning ── */
+.chrome-warn {
+  background: rgba(255,107,53,0.08);
+  border: 1px solid rgba(255,107,53,0.25);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: .76rem;
+  color: var(--accent2);
+  font-family: var(--mono);
+}
+
+/* ── Settings Drawer ── */
+.settings-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(3px);
+  z-index: 200;
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--transition);
+}
+.settings-overlay.open { opacity: 1; pointer-events: all; }
+
+.settings-drawer {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: 340px;
+  max-width: 90vw;
+  background: var(--bg2);
+  border-left: 1px solid var(--border);
+  z-index: 201;
+  transform: translateX(100%);
+  transition: transform var(--transition);
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.settings-drawer.open { transform: translateX(0); }
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.settings-title {
+  font-family: var(--ui);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--white);
+  letter-spacing: .1em;
+}
+.close-btn {
+  width: 30px; height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+  transition: all var(--transition);
+}
+.close-btn:hover { border-color: var(--red); color: var(--red); }
+
+.settings-section { display: flex; flex-direction: column; gap: 10px; }
+.settings-section-title {
+  font-family: var(--mono);
+  font-size: .62rem;
+  color: var(--muted);
+  letter-spacing: .16em;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Theme Swatches */
+.theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.theme-swatch {
+  padding: 9px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: .62rem;
+  transition: all var(--transition);
+  background: var(--panel2);
+}
+.theme-swatch:hover { border-color: var(--border2); }
+.theme-swatch.active { border-color: var(--accent); }
+.theme-dot {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  margin: 0 auto 5px;
+}
+.theme-name { color: var(--text2); font-size: .6rem; }
+
+/* Settings Controls */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--panel2);
+  border-radius: var(--radius-sm);
+}
+.settings-row-label {
+  font-family: var(--mono);
+  font-size: .72rem;
+  color: var(--text2);
+}
+.mini-toggle {
+  position: relative;
+  width: 36px; height: 18px;
+  cursor: pointer;
+}
+.mini-toggle input { opacity: 0; width: 0; height: 0; }
+.mini-track {
+  position: absolute; inset: 0;
+  background: var(--border2);
+  border-radius: 9px;
+  transition: background .3s;
+}
+.mini-toggle input:checked + .mini-track { background: var(--accent); }
+.mini-thumb {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 14px; height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform .3s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.mini-toggle input:checked ~ .mini-thumb { transform: translateX(18px); }
+
+.settings-range {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border2);
+  outline: none;
+  cursor: pointer;
+}
+.settings-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0,212,255,0.4);
+}
+
+/* Add Relay Form */
+.add-relay-form { display: flex; flex-direction: column; gap: 8px; }
+.form-row { display: flex; gap: 7px; }
+.form-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: .78rem;
+  padding: 8px 11px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color var(--transition);
+  min-width: 0;
+}
+.form-input:focus { border-color: var(--accent); }
+.emoji-picker { display: flex; flex-wrap: wrap; gap: 5px; }
+.emoji-opt {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--transition);
+}
+.emoji-opt:hover { border-color: var(--accent); background: rgba(0,212,255,0.06); }
+.emoji-opt.selected { border-color: var(--accent); background: rgba(0,212,255,0.12); }
+.form-btn {
+  width: 100%;
+  padding: 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: .74rem;
+  cursor: pointer;
+  transition: all var(--transition);
+  letter-spacing: .08em;
+}
+.form-btn.primary { border-color: var(--accent); color: var(--accent); }
+.form-btn:hover { background: rgba(0,212,255,0.07); border-color: var(--accent); color: var(--accent); }
+
+/* ── Scene Buttons ── */
+.scenes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 20px; }
+.scene-btn {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--transition);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.scene-btn:hover { border-color: var(--accent2); background: rgba(255,107,53,0.06); }
+.scene-icon { font-size: 1.4rem; }
+.scene-name {
+  font-family: var(--ui);
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--text2);
+  letter-spacing: .06em;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .sidebar { display: none; }
+  .main-content { margin-left: 0; }
+}
+</style>
 </head>
 <body>
-<div class="container">
 
-    <header>
-        <div class="logo-ring">
-            <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zm-1 3a1 1 0 0 1 2 0v8a1 1 0 0 1-2 0V4zM7.07 14.07A5 5 0 0 0 7 15h2a3 3 0 0 0 6 0h2a5 5 0 0 0-9.93-1.07zM11 20v2h2v-2h-2z"/></svg>
-        </div>
-        <div>
-            <h1>VOICE<span>RELAY</span></h1>
-            <div class="subtitle">ESP32 · WEB SPEECH API · CHROME ONLY</div>
-        </div>
-    </header>
+<div class="app-layout">
 
-    <div class="chrome-warn" id="browser-warn" style="display:none">
-        ⚠ <strong>Non-Chrome browser detected.</strong> Web Speech API requires Google Chrome for voice recognition.
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar" id="sidebar">
+
+    <div class="sidebar-logo">
+      <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zm-1 3a1 1 0 0 1 2 0v8a1 1 0 0 1-2 0V4zM7.07 14.07A5 5 0 0 0 7 15h2a3 3 0 0 0 6 0h2a5 5 0 0 0-9.93-1.07zM11 20v2h2v-2h-2z"/></svg>
     </div>
 
-    <div class="ip-bar">
+    <!-- Dashboard -->
+    <div class="nav-item active" title="Dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+        <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+      </svg>
+      <span class="nav-label">Dashboard</span>
+    </div>
+
+    <!-- Voice -->
+    <div class="nav-item" title="Voice Control" onclick="document.getElementById('mic-btn').scrollIntoView({behavior:'smooth'})">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+        <path d="M7 11a5 5 0 0 0 10 0M12 19v3M9 22h6"/>
+      </svg>
+      <span class="nav-label">Voice</span>
+    </div>
+
+    <!-- Scenes -->
+    <div class="nav-item" title="Scenes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="5"/><line x1="12" y1="2" x2="12" y2="4"/>
+        <line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/>
+        <line x1="20" y1="12" x2="22" y2="12"/>
+      </svg>
+      <span class="nav-label">Scenes</span>
+    </div>
+
+    <div class="nav-divider"></div>
+    <div class="sidebar-spacer"></div>
+
+    <!-- Settings -->
+    <div class="nav-item" title="Settings" onclick="openSettings()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      <span class="nav-label">Settings</span>
+    </div>
+
+  </nav>
+
+  <!-- ── Main Content ── -->
+  <main class="main-content">
+    <div class="container">
+
+      <!-- Chrome warning -->
+      <div class="chrome-warn" id="browser-warn" style="display:none">
+        ⚠ <strong>Non-Chrome browser detected.</strong> Web Speech API requires Google Chrome for voice recognition.
+      </div>
+
+      <!-- Topbar -->
+      <div class="topbar">
+        <span class="topbar-title">EXCELL<span>AI</span> </span>
+        <span class="topbar-time" id="topbar-time">00:00:00</span>
+        <button class="check-btn" onclick="openSettings()">⚙ Settings</button>
+      </div>
+
+      <!-- Stats Row -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">ACTIVE</div>
+          <div class="stat-value green" id="stat-active">0</div>
+          <div class="stat-sub">relays on</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">TOTAL RELAYS</div>
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-sub">configured</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">ESP32 STATUS</div>
+          <div class="stat-value accent" id="stat-offline">—</div>
+          <div class="stat-sub">offline count</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">VOICE</div>
+          <div class="stat-value accent">WEB</div>
+          <div class="stat-sub">speech api</div>
+        </div>
+      </div>
+
+      <!-- IP Bar -->
+      <div class="ip-bar">
         <span class="ip-label">ESP32 IP →</span>
         <input class="ip-input" id="ip-input" type="text" value="192.168.1.100" placeholder="192.168.x.x" spellcheck="false">
         <button class="check-btn" onclick="checkConnection()">PING</button>
         <div class="conn-dot" id="conn-dot"></div>
-    </div>
+        <span class="conn-label" id="conn-label">Not connected</span>
+      </div>
 
-    <div class="mic-section">
-        <div class="mic-outer">
-            <button class="mic-btn" id="mic-btn" onclick="toggleListening()" title="Hold to speak">
-                <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zm-1 3a1 1 0 0 1 2 0v8a1 1 0 0 1-2 0V4zM7.07 14.07A5 5 0 0 0 7 15h2a3 3 0 0 0 6 0h2a5 5 0 0 0-9.93-1.07zM11 20v2h2v-2h-2z"/></svg>
+      <!-- Voice Panel -->
+      <div class="voice-panel">
+
+        <!-- Mic -->
+        <div class="mic-area">
+          <div class="mic-outer">
+            <button class="mic-btn" id="mic-btn" onclick="toggleListening()" title="Click to speak">
+              <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zm-1 3a1 1 0 0 1 2 0v8a1 1 0 0 1-2 0V4zM7.07 14.07A5 5 0 0 0 7 15h2a3 3 0 0 0 6 0h2a5 5 0 0 0-9.93-1.07zM11 20v2h2v-2h-2z"/></svg>
             </button>
             <div class="mic-ring r2"></div>
             <div class="mic-ring r3"></div>
+          </div>
+          <div class="mic-label">TAP TO SPEAK</div>
         </div>
-        <div class="status-box">
+
+        <!-- Voice Info -->
+        <div class="voice-info">
+
+          <!-- Status -->
+          <div class="status-box">
             <div class="status-label">STATUS</div>
             <div id="status-text">Tap mic to start voice recognition</div>
             <div id="transcript-text"></div>
-        </div>
-    </div>
+          </div>
 
-    <div class="chips-section">
+          <!-- AI Response -->
+          <div class="ai-response-box">
+            <div class="ai-response-label">
+              <div class="ai-dot"></div>
+              AI RESPONSE
+            </div>
+            <div id="ai-response-text">Ready. Say a command like "turn the light on".</div>
+            <div class="tts-controls">
+              <button class="tts-btn" onclick="stopSpeaking()">⏹ Stop</button>
+              <button class="tts-btn" onclick="testSpeech()">🔊 Test Voice</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Scenes -->
+      <div class="section-title">// SCENES</div>
+      <div class="scenes-grid" style="margin-bottom:20px;">
+        <div class="scene-btn" onclick="runScene('morning')">
+          <div class="scene-icon">🌅</div>
+          <div class="scene-name">MORNING</div>
+        </div>
+        <div class="scene-btn" onclick="runScene('night')">
+          <div class="scene-icon">🌙</div>
+          <div class="scene-name">NIGHT</div>
+        </div>
+        <div class="scene-btn" onclick="runScene('work')">
+          <div class="scene-icon">💼</div>
+          <div class="scene-name">WORK</div>
+        </div>
+        <div class="scene-btn" onclick="runScene('relax')">
+          <div class="scene-icon">🛋️</div>
+          <div class="scene-name">RELAX</div>
+        </div>
+      </div>
+
+      <!-- Quick Commands -->
+      <div class="chips-section">
         <div class="section-title">// QUICK COMMANDS</div>
-        <div class="chips">
-            <span class="chip" onclick="sendCmd('light','on')">light on</span>
-            <span class="chip" onclick="sendCmd('light','off')">light off</span>
-            <span class="chip" onclick="sendCmd('fan','on')">fan on</span>
-            <span class="chip" onclick="sendCmd('fan','off')">fan off</span>
-            <span class="chip" onclick="sendCmd('pump','on')">pump on</span>
-            <span class="chip" onclick="sendCmd('pump','off')">pump off</span>
-            <span class="chip" onclick="sendCmd('heater','on')">heater on</span>
-            <span class="chip" onclick="sendCmd('heater','off')">heater off</span>
-            <span class="chip" onclick="sendCmd('light','toggle')">toggle light</span>
-            <span class="chip" onclick="sendCmd('fan','toggle')">toggle fan</span>
-            <span class="chip" onclick="fetchStatus()">refresh status</span>
-        </div>
-    </div>
+        <div class="chips" id="quick-chips"><!-- built by JS --></div>
+      </div>
 
-    <div class="section-title">// RELAY CONTROLS</div>
-    <div class="relays-grid" id="relays-grid">
-        </div>
+      <!-- Relay Cards -->
+      <div class="section-title">// RELAY CONTROLS</div>
+      <div class="relays-grid" id="relays-grid"><!-- built by JS --></div>
 
-    <div class="all-ctrl">
+      <!-- All Controls -->
+      <div class="all-ctrl">
         <button class="all-btn all-on"  onclick="sendCmd('all','on')">▶ ALL ON</button>
         <button class="all-btn all-off" onclick="sendCmd('all','off')">■ ALL OFF</button>
         <button class="all-btn all-tog" onclick="sendCmd('all','toggle')">⇌ ALL TOGGLE</button>
-    </div>
+      </div>
 
-    <div class="log-section">
-        <div class="section-title">// ACTIVITY LOG</div>
-        <div class="log-box" id="log-box"></div>
+      <!-- Activity Log -->
+      <div class="section-title">// ACTIVITY LOG</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <button class="check-btn" onclick="clearLog()">CLEAR LOG</button>
+      </div>
+      <div class="log-box" id="log-box"></div>
+
     </div>
+  </main>
 
 </div>
 
-<script src="script.js"></script>
+<!-- ═══════════════════════════════════════════════════════════
+     Settings Drawer
+═══════════════════════════════════════════════════════════ -->
+<div class="settings-overlay" id="settings-overlay" onclick="closeSettings()"></div>
+
+<div class="settings-drawer" id="settings-drawer">
+
+  <div class="settings-header">
+    <div class="settings-title">⚙ SETTINGS</div>
+    <button class="close-btn" onclick="closeSettings()">✕</button>
+  </div>
+
+  <!-- Color Theme -->
+  <div class="settings-section">
+    <div class="settings-section-title">COLOR THEME</div>
+    <div class="theme-grid">
+      <div class="theme-swatch" data-theme="cyber" onclick="applyTheme('cyber')">
+        <div class="theme-dot" style="background:#00d4ff;"></div>
+        <div class="theme-name">Cyber</div>
+      </div>
+      <div class="theme-swatch" data-theme="ocean" onclick="applyTheme('ocean')">
+        <div class="theme-dot" style="background:#0af5d8;"></div>
+        <div class="theme-name">Ocean</div>
+      </div>
+      <div class="theme-swatch" data-theme="amber" onclick="applyTheme('amber')">
+        <div class="theme-dot" style="background:#ffa726;"></div>
+        <div class="theme-name">Amber</div>
+      </div>
+      <div class="theme-swatch" data-theme="forest" onclick="applyTheme('forest')">
+        <div class="theme-dot" style="background:#4caf50;"></div>
+        <div class="theme-name">Forest</div>
+      </div>
+      <div class="theme-swatch" data-theme="purple" onclick="applyTheme('purple')">
+        <div class="theme-dot" style="background:#b388ff;"></div>
+        <div class="theme-name">Dusk</div>
+      </div>
+      <div class="theme-swatch" data-theme="light" onclick="applyTheme('light')">
+        <div class="theme-dot" style="background:#0078d4;border:1px solid #c4d6e8;"></div>
+        <div class="theme-name">Light</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Voice / TTS Settings -->
+  <div class="settings-section">
+    <div class="settings-section-title">VOICE RESPONSE</div>
+
+    <div class="settings-row">
+      <span class="settings-row-label">🔊 Speak Responses</span>
+      <label class="mini-toggle">
+        <input type="checkbox" id="tts-toggle-setting" onchange="onTTSToggle(this.checked)">
+        <div class="mini-track"></div>
+        <div class="mini-thumb"></div>
+      </label>
+    </div>
+
+    <div class="settings-row">
+      <span class="settings-row-label">Continuous Listen</span>
+      <label class="mini-toggle">
+        <input type="checkbox" id="continuous-voice" onchange="onContinuousToggle(this.checked)">
+        <div class="mini-track"></div>
+        <div class="mini-thumb"></div>
+      </label>
+    </div>
+
+    <div class="settings-section-title" style="margin-top:8px;">VOICE SPEED</div>
+    <input class="settings-range" type="range" id="tts-rate" min="0.5" max="2" step="0.1" value="1"
+           oninput="onRateChange(this.value)">
+
+    <div class="settings-section-title">VOICE PITCH</div>
+    <input class="settings-range" type="range" id="tts-pitch" min="0.5" max="2" step="0.1" value="1"
+           oninput="onPitchChange(this.value)">
+
+    <div class="settings-section-title">VOICE SELECTION</div>
+    <div class="voice-chips" id="voice-select-list">Loading voices…</div>
+  </div>
+
+  <!-- Connection Settings -->
+  <div class="settings-section">
+    <div class="settings-section-title">CONNECTION</div>
+    <div class="settings-row">
+      <span class="settings-row-label">Auto-Connect on Load</span>
+      <label class="mini-toggle">
+        <input type="checkbox" id="auto-connect" onchange="onAutoConnectToggle(this.checked)">
+        <div class="mini-track"></div>
+        <div class="mini-thumb"></div>
+      </label>
+    </div>
+    <button class="form-btn" onclick="checkConnection()">🔌 Test Connection Now</button>
+  </div>
+
+  <!-- Add Relay -->
+  <div class="settings-section" id="add-relay-section">
+    <div class="settings-section-title">ADD NEW RELAY</div>
+    <div class="add-relay-form">
+      <div class="form-row">
+        <input class="form-input" id="new-relay-name" type="text" placeholder="Relay name (e.g. AC Unit)">
+      </div>
+      <div class="form-row">
+        <input class="form-input" id="new-relay-desc" type="text" placeholder="Description (optional)">
+      </div>
+      <div class="settings-section-title">PICK ICON</div>
+      <div class="emoji-picker" id="emoji-picker"></div>
+      <button class="form-btn primary" onclick="addRelay()">+ ADD RELAY</button>
+    </div>
+  </div>
+
+  <!-- Reset -->
+  <div class="settings-section">
+    <div class="settings-section-title">RESET</div>
+    <button class="form-btn" style="border-color:var(--red);color:var(--red);"
+            onclick="if(confirm('Reset all relays to defaults?')){localStorage.removeItem('vr_relays');location.reload();}">
+      ⚠ Reset Relays to Default
+    </button>
+  </div>
+
+</div>
+
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   VoiceRelay — Smart Home Dashboard
+   app.js
+═══════════════════════════════════════════════════════════ */
+
+// ── State ──────────────────────────────────────────────────────────────────────
+
+const DEFAULT_RELAYS = [
+  { id: 'light',  icon: '💡', name: 'Light',  desc: 'Main lighting' },
+  { id: 'fan',    icon: '🌀', name: 'Fan',    desc: 'Ceiling fan' },
+  { id: 'pump',   icon: '💧', name: 'Pump',   desc: 'Water pump' },
+  { id: 'heater', icon: '🔥', name: 'Heater', desc: 'Space heater' },
+];
+
+const EMOJI_OPTIONS = ['💡','🌀','💧','🔥','🔌','📺','🎵','❄️','🌡️','🔒','🚿','🍳','💨','🌿','🖥️','📡'];
+
+let relays   = JSON.parse(localStorage.getItem('vr_relays') || 'null') || DEFAULT_RELAYS.map(r => ({...r}));
+let states   = {};
+let settings = JSON.parse(localStorage.getItem('vr_settings') || 'null') || {
+  theme: 'cyber',
+  tts: true,
+  ttsRate: 1.0,
+  ttsPitch: 1.0,
+  ttsVoiceName: '',
+  autoConnect: true,
+  continuousVoice: false,
+};
+
+relays.forEach(r => states[r.id] = false);
+
+let recognition   = null;
+let listening     = false;
+let ttsEnabled    = settings.tts;
+let selectedEmoji = '💡';
+let ttsVoice      = null;
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  applyTheme(settings.theme);
+  syncSettingsUI();
+  populateVoices();
+  window.speechSynthesis?.addEventListener('voiceschanged', populateVoices);
+
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    document.getElementById('browser-warn').style.display = 'block';
+    document.getElementById('mic-btn').disabled = true;
+  }
+
+  buildRelayCards();
+  updateStatsRow();
+  startClock();
+
+  if (settings.autoConnect) checkConnection();
+  buildEmojiPicker();
+  document.getElementById('tts-toggle-setting').checked = settings.tts;
+  document.getElementById('tts-rate').value = settings.ttsRate;
+  document.getElementById('tts-pitch').value = settings.ttsPitch;
+  document.getElementById('auto-connect').checked = settings.autoConnect;
+});
+
+// ── Clock ──────────────────────────────────────────────────────────────────────
+
+function startClock() {
+  const el = document.getElementById('topbar-time');
+  const tick = () => {
+    const now = new Date();
+    el.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+  tick();
+  setInterval(tick, 1000);
+}
+
+// ── Stats Row ─────────────────────────────────────────────────────────────────
+
+function updateStatsRow() {
+  const onCount = Object.values(states).filter(Boolean).length;
+  document.getElementById('stat-active').textContent  = onCount;
+  document.getElementById('stat-total').textContent   = relays.length;
+  document.getElementById('stat-offline').textContent =
+    document.getElementById('conn-dot').classList.contains('ok') ? '0' : '—';
+}
+
+// ── Theme ──────────────────────────────────────────────────────────────────────
+
+function applyTheme(name) {
+  settings.theme = name;
+  document.documentElement.dataset.theme = name === 'cyber' ? '' : name;
+  document.querySelectorAll('.theme-swatch').forEach(s => {
+    s.classList.toggle('active', s.dataset.theme === name);
+  });
+  saveSettings();
+}
+
+// ── Relay Cards ───────────────────────────────────────────────────────────────
+
+function buildRelayCards() {
+  const grid = document.getElementById('relays-grid');
+  grid.innerHTML = relays.map(r => `
+    <div class="relay-card" id="card-${r.id}">
+      <button class="relay-delete" onclick="deleteRelay('${r.id}')" title="Remove relay">✕</button>
+      <div class="relay-top">
+        <div>
+          <div class="relay-name">${r.name}</div>
+          <div class="relay-desc">${r.desc || r.id}</div>
+        </div>
+        <div class="relay-icon-wrap">${r.icon}</div>
+      </div>
+      <div class="relay-state">
+        <div class="relay-state-dot"></div>
+        <span id="state-label-${r.id}">STANDBY</span>
+      </div>
+      <div class="toggle-wrap">
+        <label class="toggle">
+          <input type="checkbox" id="toggle-${r.id}" onchange="onToggle('${r.id}', this.checked)">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+        <span class="toggle-label" id="toggle-lbl-${r.id}">OFF</span>
+      </div>
+      <div class="relay-btns">
+        <button class="rbtn on"  onclick="sendCmd('${r.id}','on')">ON</button>
+        <button class="rbtn off" onclick="sendCmd('${r.id}','off')">OFF</button>
+        <button class="rbtn"     onclick="sendCmd('${r.id}','toggle')">TOGGLE</button>
+      </div>
+    </div>
+  `).join('') + `
+    <div class="relay-card add-card" onclick="openSettings(); showAddRelayForm()">
+      <div class="add-card-inner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+        <span>ADD RELAY</span>
+      </div>
+    </div>
+  `;
+  updateUI();
+  updateStatsRow();
+  buildQuickChips();
+}
+
+function onToggle(id, checked) {
+  sendCmd(id, checked ? 'on' : 'off');
+}
+
+function updateUI() {
+  relays.forEach(r => {
+    const on   = states[r.id];
+    const card = document.getElementById('card-' + r.id);
+    const lbl  = document.getElementById('state-label-' + r.id);
+    const tlbl = document.getElementById('toggle-lbl-' + r.id);
+    const chk  = document.getElementById('toggle-' + r.id);
+    if (!card) return;
+    card.classList.toggle('on', on);
+    if (lbl)  lbl.textContent  = on ? 'ACTIVE'  : 'STANDBY';
+    if (tlbl) tlbl.textContent = on ? 'ON' : 'OFF';
+    if (chk)  chk.checked = on;
+  });
+  updateStatsRow();
+}
+
+function deleteRelay(id) {
+  relays = relays.filter(r => r.id !== id);
+  delete states[id];
+  saveRelays();
+  buildRelayCards();
+  log('info', `Relay "${id}" removed`);
+}
+
+// ── Quick Chips ───────────────────────────────────────────────────────────────
+
+function buildQuickChips() {
+  const container = document.getElementById('quick-chips');
+  const extra = [
+    { label: 'all on',    fn: () => sendCmd('all','on') },
+    { label: 'all off',   fn: () => sendCmd('all','off') },
+    { label: 'refresh',   fn: fetchStatus },
+  ];
+  const relayChips = relays.flatMap(r => [
+    { label: `${r.name.toLowerCase()} on`,  fn: () => sendCmd(r.id,'on') },
+    { label: `${r.name.toLowerCase()} off`, fn: () => sendCmd(r.id,'off') },
+  ]);
+  const all = [...relayChips, ...extra];
+  container.innerHTML = all.map((c,i) =>
+    `<span class="chip" onclick="chips[${i}].fn()">${c.label}</span>`
+  ).join('');
+  window.chips = all;
+}
+
+// ── IP / Connection ────────────────────────────────────────────────────────────
+
+function getIP() { return document.getElementById('ip-input').value.trim(); }
+
+async function checkConnection() {
+  const dot   = document.getElementById('conn-dot');
+  const label = document.getElementById('conn-label');
+  dot.className = 'conn-dot';
+  label.textContent = 'Connecting…';
+  try {
+    const r = await fetch(`http://${getIP()}/status`, { signal: AbortSignal.timeout(3000) });
+    if (r.ok) {
+      const data = await r.json();
+      relays.forEach(rel => {
+        if (data[rel.id] !== undefined) states[rel.id] = data[rel.id];
+      });
+      updateUI();
+      dot.className = 'conn-dot ok';
+      label.textContent = 'Connected';
+      log('info', `Connected → ${getIP()}`);
+    } else throw new Error('Bad response');
+  } catch {
+    dot.className = 'conn-dot err';
+    label.textContent = 'Offline';
+    log('err', `Cannot reach ${getIP()}`);
+  }
+}
+
+// ── Send Command ───────────────────────────────────────────────────────────────
+
+async function sendCmd(device, action) {
+  const url = `http://${getIP()}/cmd?device=${device}&action=${action}`;
+  setStatus(`Sending → ${device} ${action}…`, 'info');
+  try {
+    const r    = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    const data = await r.json();
+    if (data.ok) {
+      if (device === 'all') {
+        const on = action === 'on' ? true : action === 'off' ? false : null;
+        relays.forEach(rel => { states[rel.id] = on !== null ? on : !states[rel.id]; });
+      } else {
+        states[device] = data.state ?? (action === 'on');
+      }
+      updateUI();
+      const msg = `${device.toUpperCase()} turned ${action.toUpperCase()}`;
+      setStatus(`✓ ${msg}`, 'ok');
+      log('ok', `${device} → ${action}`);
+      speakResponse(msg);
+      showAIResponse(msg);
+    } else {
+      const err = data.error || 'Command failed';
+      setStatus(err, 'err');
+      log('err', err);
+      speakResponse(`Error: ${err}`);
+    }
+  } catch (e) {
+    setStatus('ESP32 unreachable', 'err');
+    log('err', `Fetch failed: ${e.message}`);
+    speakResponse('Could not reach ESP32. Check your connection.');
+    showAIResponse('⚠ ESP32 unreachable. Check IP address and WiFi connection.');
+  }
+}
+
+async function fetchStatus() {
+  try {
+    const r    = await fetch(`http://${getIP()}/status`, { signal: AbortSignal.timeout(3000) });
+    const data = await r.json();
+    relays.forEach(rel => {
+      if (data[rel.id] !== undefined) states[rel.id] = data[rel.id];
+    });
+    updateUI();
+    log('info', 'Status refreshed');
+    setStatus('Status updated', 'ok');
+    speakResponse('Status refreshed successfully.');
+  } catch {
+    log('err', 'Status fetch failed');
+  }
+}
+
+// ── Scenes ────────────────────────────────────────────────────────────────────
+
+function runScene(name) {
+  const scenes = {
+    morning: { light: true,  fan: true,  pump: false, heater: false },
+    night:   { light: false, fan: false, pump: false, heater: false },
+    work:    { light: true,  fan: true,  pump: false, heater: false },
+    relax:   { light: true,  fan: false, pump: false, heater: true  },
+  };
+  const s = scenes[name];
+  if (!s) return;
+  relays.forEach(r => {
+    if (s[r.id] !== undefined) states[r.id] = s[r.id];
+  });
+  updateUI();
+  log('info', `Scene: ${name}`);
+  setStatus(`Scene → ${name.toUpperCase()} activated`, 'ok');
+  speakResponse(`${name} scene activated.`);
+  showAIResponse(`🌟 Scene "${name}" activated. Adjusting all relays to match the scene profile.`);
+}
+
+// ── Voice Recognition ──────────────────────────────────────────────────────────
+
+function toggleListening() {
+  if (listening) stopListening();
+  else startListening();
+}
+
+function startListening() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return;
+
+  recognition = new SpeechRecognition();
+  recognition.continuous      = settings.continuousVoice;
+  recognition.interimResults  = true;
+  recognition.lang            = 'en-US';
+
+  recognition.onstart = () => {
+    listening = true;
+    document.getElementById('mic-btn').classList.add('listening');
+    setStatus('Listening… speak now', 'info');
+    log('info', 'Voice recognition started');
+  };
+
+  recognition.onresult = (e) => {
+    const transcript = Array.from(e.results)
+      .map(r => r[0].transcript).join(' ').toLowerCase().trim();
+    document.getElementById('transcript-text').textContent = `"${transcript}"`;
+    if (e.results[e.results.length - 1].isFinal) {
+      log('voice', `Heard: "${transcript}"`);
+      parseAndSend(transcript);
+    }
+  };
+
+  recognition.onerror = (e) => {
+    setStatus(`Voice error: ${e.error}`, 'err');
+    log('err', `Speech error: ${e.error}`);
+    stopListening();
+  };
+
+  recognition.onend = () => {
+    if (settings.continuousVoice && listening) {
+      recognition.start();
+    } else {
+      stopListening();
+    }
+  };
+
+  recognition.start();
+}
+
+function stopListening() {
+  listening = false;
+  document.getElementById('mic-btn').classList.remove('listening');
+  if (recognition) { try { recognition.stop(); } catch {} recognition = null; }
+  const st = document.getElementById('status-text');
+  if (st.textContent.startsWith('Listening')) setStatus('Ready', '');
+}
+
+// ── Voice Parser ───────────────────────────────────────────────────────────────
+
+function parseAndSend(text) {
+  const deviceNames  = relays.map(r => r.id.toLowerCase());
+  const deviceLabels = relays.map(r => r.name.toLowerCase());
+  const allDevices   = [...new Set([...deviceNames, ...deviceLabels, 'all', 'everything'])];
+
+  let device = null, action = null;
+
+  // Patterns: "turn on/off the X", "turn the X on/off", "X on/off"
+  const patterns = [
+    /turn\s+(on|off)\s+(?:the\s+)?(\w+)/,
+    /turn\s+(?:the\s+)?(\w+)\s+(on|off)/,
+    /switch\s+(on|off)\s+(?:the\s+)?(\w+)/,
+    /(?:activate|enable)\s+(?:the\s+)?(\w+)/,
+    /(?:deactivate|disable|kill)\s+(?:the\s+)?(\w+)/,
+  ];
+
+  const m1 = text.match(patterns[0]);
+  if (m1) { action = m1[1]; device = m1[2]; }
+
+  const m2 = !device && text.match(patterns[1]);
+  if (m2) { device = m2[1]; action = m2[2]; }
+
+  // Scene detection
+  const sceneMatch = text.match(/(?:activate|set|run|start|switch to)\s+(\w+)\s+(?:scene|mode)/);
+  if (sceneMatch) { runScene(sceneMatch[1]); return; }
+  if (text.includes('good morning') || text.includes('morning mode')) { runScene('morning'); return; }
+  if (text.includes('good night')   || text.includes('night mode'))   { runScene('night');   return; }
+
+  // Find device by relay name or label
+  if (!device) {
+    for (const r of relays) {
+      if (text.includes(r.id.toLowerCase()) || text.includes(r.name.toLowerCase())) {
+        device = r.id; break;
+      }
+    }
+  }
+
+  if (!device && (text.includes('everything') || text.includes(' all'))) device = 'all';
+
+  if (!action) {
+    if      (text.includes(' on') || text.includes('start') || text.includes('enable'))  action = 'on';
+    else if (text.includes(' off') || text.includes('stop') || text.includes('disable'))  action = 'off';
+    else if (text.includes('toggle') || text.includes('switch') || text.includes('flip')) action = 'toggle';
+  }
+
+  if (device && action) {
+    // Normalize device id
+    const relay = relays.find(r => r.name.toLowerCase() === device || r.id === device);
+    const resolvedId = relay ? relay.id : device;
+
+    const valid = relays.some(r => r.id === resolvedId) || resolvedId === 'all';
+    if (!valid) {
+      const aiMsg = `I heard "${device}" but that relay doesn't exist. Available: ${relays.map(r=>r.name).join(', ')}.`;
+      setStatus(`Unknown device: "${device}"`, 'err');
+      showAIResponse(aiMsg);
+      speakResponse(aiMsg);
+      return;
+    }
+    setStatus(`Voice → ${resolvedId} ${action}`, 'info');
+    sendCmd(resolvedId, action);
+  } else {
+    const aiMsg = `I couldn't understand that command. Try saying "turn the light on" or "fan off".`;
+    setStatus('Could not parse command', 'err');
+    log('err', `Unrecognized: "${text}"`);
+    showAIResponse(aiMsg);
+    speakResponse(aiMsg);
+  }
+}
+
+// ── Text-to-Speech ─────────────────────────────────────────────────────────────
+
+function populateVoices() {
+  const voices  = window.speechSynthesis?.getVoices() || [];
+  const select  = document.getElementById('voice-select-list');
+  if (!select) return;
+  select.innerHTML = '';
+
+  const filtered = voices.filter(v => v.lang.startsWith('en'));
+  filtered.forEach((v, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'voice-chip' + (settings.ttsVoiceName === v.name ? ' active' : '');
+    chip.textContent = v.name.replace('Google ', '').replace('Microsoft ', '').split(' ')[0];
+    chip.title = v.name;
+    chip.onclick = () => {
+      ttsVoice = v;
+      settings.ttsVoiceName = v.name;
+      saveSettings();
+      document.querySelectorAll('.voice-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      speakResponse(`Voice set to ${v.name.split(' ')[0]}`);
+    };
+    select.appendChild(chip);
+    if (v.name === settings.ttsVoiceName) ttsVoice = v;
+  });
+}
+
+function speakResponse(text) {
+  if (!settings.tts || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  if (ttsVoice) utt.voice = ttsVoice;
+  utt.rate  = parseFloat(settings.ttsRate)  || 1.0;
+  utt.pitch = parseFloat(settings.ttsPitch) || 1.0;
+  utt.onstart = () => {
+    const el = document.getElementById('ai-response-text');
+    if (el) el.classList.add('speaking');
+  };
+  utt.onend = () => {
+    const el = document.getElementById('ai-response-text');
+    if (el) el.classList.remove('speaking');
+  };
+  window.speechSynthesis.speak(utt);
+}
+
+function stopSpeaking() {
+  window.speechSynthesis?.cancel();
+  document.getElementById('ai-response-text')?.classList.remove('speaking');
+}
+
+function testSpeech() {
+  speakResponse('Voice relay system is active and ready for your commands.');
+}
+
+// ── AI Response Display ────────────────────────────────────────────────────────
+
+function showAIResponse(msg) {
+  const el = document.getElementById('ai-response-text');
+  if (!el) return;
+  el.textContent = msg;
+  log('ai', msg.substring(0, 80) + (msg.length > 80 ? '…' : ''));
+}
+
+// ── Settings Panel ────────────────────────────────────────────────────────────
+
+function openSettings() {
+  document.getElementById('settings-overlay').classList.add('open');
+  document.getElementById('settings-drawer').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settings-overlay').classList.remove('open');
+  document.getElementById('settings-drawer').classList.remove('open');
+}
+
+function showAddRelayForm() {
+  // Scroll to add relay section in settings
+  const section = document.getElementById('add-relay-section');
+  if (section) setTimeout(() => section.scrollIntoView({ behavior: 'smooth' }), 200);
+}
+
+function buildEmojiPicker() {
+  const picker = document.getElementById('emoji-picker');
+  picker.innerHTML = EMOJI_OPTIONS.map(e =>
+    `<span class="emoji-opt${e === selectedEmoji ? ' selected' : ''}" onclick="selectEmoji('${e}')">${e}</span>`
+  ).join('');
+}
+
+function selectEmoji(e) {
+  selectedEmoji = e;
+  document.querySelectorAll('.emoji-opt').forEach(el => el.classList.remove('selected'));
+  document.querySelectorAll('.emoji-opt').forEach(el => {
+    if (el.textContent === e) el.classList.add('selected');
+  });
+}
+
+function addRelay() {
+  const nameEl = document.getElementById('new-relay-name');
+  const descEl = document.getElementById('new-relay-desc');
+  const name   = nameEl.value.trim();
+  const desc   = descEl.value.trim();
+
+  if (!name) { nameEl.focus(); return; }
+
+  const id = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  if (relays.some(r => r.id === id)) {
+    showAIResponse(`A relay named "${name}" already exists.`);
+    return;
+  }
+
+  relays.push({ id, icon: selectedEmoji, name, desc: desc || id });
+  states[id] = false;
+  saveRelays();
+  buildRelayCards();
+  nameEl.value = '';
+  descEl.value = '';
+  log('info', `Relay "${name}" added`);
+  showAIResponse(`New relay "${name}" added successfully!`);
+  speakResponse(`New relay ${name} created.`);
+}
+
+function syncSettingsUI() {
+  document.getElementById('tts-toggle-setting').checked = settings.tts;
+  document.getElementById('tts-rate').value   = settings.ttsRate;
+  document.getElementById('tts-pitch').value  = settings.ttsPitch;
+  document.getElementById('auto-connect').checked = settings.autoConnect;
+}
+
+// ── Settings Handlers (called from HTML) ─────────────────────────────────────
+
+function onTTSToggle(checked) {
+  settings.tts = checked;
+  if (!checked) stopSpeaking();
+  saveSettings();
+}
+function onRateChange(v) {
+  settings.ttsRate = parseFloat(v);
+  saveSettings();
+}
+function onPitchChange(v) {
+  settings.ttsPitch = parseFloat(v);
+  saveSettings();
+}
+function onAutoConnectToggle(checked) {
+  settings.autoConnect = checked;
+  saveSettings();
+}
+function onContinuousToggle(checked) {
+  settings.continuousVoice = checked;
+  if (!checked && listening) stopListening();
+  saveSettings();
+}
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+
+function saveRelays() {
+  localStorage.setItem('vr_relays', JSON.stringify(relays));
+}
+function saveSettings() {
+  localStorage.setItem('vr_settings', JSON.stringify(settings));
+}
+
+// ── UI Helpers ─────────────────────────────────────────────────────────────────
+
+function setStatus(msg, cls) {
+  const el = document.getElementById('status-text');
+  el.textContent = msg;
+  el.className   = cls || '';
+}
+
+function log(type, msg) {
+  const box = document.getElementById('log-box');
+  const ts  = new Date().toTimeString().slice(0,8);
+  const entry = document.createElement('div');
+  entry.className = `log-entry ${type}`;
+  entry.innerHTML = `<span class="ts">[${ts}]</span><span class="msg">${msg}</span>`;
+  box.appendChild(entry);
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log-box').innerHTML = '';
+}
+</script>
 </body>
 </html>
