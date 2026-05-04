@@ -1595,51 +1595,31 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
         if(statusText) statusText.innerText = "Excell is thinking...";
         if(aiResponseDisplay) aiResponseDisplay.innerText = "...";
 
-        // Multiple CORS proxies as fallbacks
-        const corsProxies = [
-            "https://api.allorigins.win/raw?url=",
-            "https://corsproxy.io/?",
-            "https://thingproxy.freeboard.io/fetch/",
-            "https://whispering-dusk-71802-5e8b3c5f9a7d.herokuapp.com/fetch/"
-        ];
-        
+        // Use cors.sh which properly supports POST requests
+        const corsProxy = "https://proxy.cors.sh/";
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
         
-        // Try proxies sequentially
-        let proxyIndex = 0;
+        console.log("Sending request via CORS proxy...");
         
-        function tryNextProxy() {
-            if (proxyIndex >= corsProxies.length) {
-                throw new Error("All CORS proxies failed");
+        fetch(corsProxy + geminiUrl, {
+            method: "POST",
+            headers: { 
+                "Content-Type": "application/json",
+                "X-CORS-Header": "true"
+            },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: text }] }],
+                tools: GEMINI_TOOLS
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(errText => {
+                    throw new Error(`Server error ${response.status}: ${errText}`);
+                });
             }
-            
-            const corsProxy = corsProxies[proxyIndex];
-            const proxiedUrl = corsProxy + encodeURIComponent(geminiUrl);
-            
-            console.log(`Trying proxy ${proxyIndex + 1}: ${corsProxy}`);
-            
-            return fetch(proxiedUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: text }] }],
-                    tools: GEMINI_TOOLS
-                })
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`Proxy ${proxyIndex + 1} failed: ${response.status}`);
-                }
-                return response.json();
-            })
-            .catch(err => {
-                console.warn(`Proxy ${proxyIndex + 1} failed:`, err);
-                proxyIndex++;
-                return tryNextProxy();
-            });
-        }
-        
-        tryNextProxy()
+            return response.json();
+        })
         .then(data => {
             if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
                 throw new Error("Invalid response from Gemini");
@@ -1664,7 +1644,8 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
                 statusText.innerText = "Connection Error";
                 statusText.className = "err";
             }
-            if(aiResponseDisplay) aiResponseDisplay.innerText = "Sorry, I couldn't connect to the AI service. Check console for details.";
+            if(aiResponseDisplay) aiResponseDisplay.innerText = "Error: " + error.message;
+            speakResponse("I'm having connection issues. Please check your API key and internet connection.");
         });
     }
 
