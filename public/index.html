@@ -1587,7 +1587,7 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
         console.warn("Speech Recognition API not available in this browser");
     }
 
-    // --- 4. GEMINI PROCESSING FUNCTION ---
+    // --- 4. BACKEND API PROCESSING FUNCTION ---
     function processWithGemini(text) {
         const statusText = document.getElementById('status-text');
         const aiResponseDisplay = document.getElementById('ai-response-text');
@@ -1595,57 +1595,59 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
         if(statusText) statusText.innerText = "Excell is thinking...";
         if(aiResponseDisplay) aiResponseDisplay.innerText = "...";
 
-        // Use cors.sh which properly supports POST requests
-        const corsProxy = "https://proxy.cors.sh/";
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+        // Use local backend server instead of CORS proxy
+        const backendUrl = `http://localhost:3001/api/chat`;
         
-        console.log("Sending request via CORS proxy...");
+        console.log("Sending request to backend server...", text);
         
-        fetch(corsProxy + geminiUrl, {
+        fetch(backendUrl, {
             method: "POST",
             headers: { 
-                "Content-Type": "application/json",
-                "X-CORS-Header": "true"
+                "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: text }] }],
-                tools: GEMINI_TOOLS
+                message: text,
+                history: [],
+                states: {}
             })
         })
         .then(response => {
             if (!response.ok) {
-                return response.text().then(errText => {
-                    throw new Error(`Server error ${response.status}: ${errText}`);
+                return response.json().catch(() => ({})).then(errData => {
+                    throw new Error(`Server error ${response.status}: ${errData.response || errData.error || 'Unknown error'}`);
                 });
             }
             return response.json();
         })
         .then(data => {
-            if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-                throw new Error("Invalid response from Gemini");
+            console.log("Backend response:", data);
+            
+            // Handle action from backend
+            if (data.action) {
+                if (data.action.type === 'control_relay') {
+                    const { device, action } = data.action.params;
+                    // Map device names to relay IDs based on your hardware setup
+                    const relayMap = { 'light': 1, 'fan': 2, 'pump': 3, 'heater': 4 };
+                    const relayId = relayMap[device] || 1;
+                    const state = action === 'on' ? 1 : 0;
+                    sendToHardware(relayId, state);
+                } else if (data.action.type === 'run_scene') {
+                    console.log("Running scene:", data.action.params.scene);
+                }
             }
             
-            const parts = data.candidates[0].content.parts;
-            const call = parts.find(p => p.functionCall);
-
-            if (call && call.functionCall) {
-                const { relay_id, state } = call.functionCall.args;
-                sendToHardware(relay_id, state);
-                respond(`Acknowledged. Setting relay ${relay_id} to ${state}.`);
-            } else {
-                // Normal Chat Response
-                const responseText = parts[0].text || "I'm not sure how to respond to that.";
-                respond(responseText);
-            }
+            // Display and speak response
+            const responseText = data.response || "I'm not sure how to respond to that.";
+            respond(responseText);
         })
         .catch(error => {
-            console.error("API Error:", error);
+            console.error("Backend Error:", error);
             if(statusText) {
                 statusText.innerText = "Connection Error";
                 statusText.className = "err";
             }
             if(aiResponseDisplay) aiResponseDisplay.innerText = "Error: " + error.message;
-            speakResponse("I'm having connection issues. Please check your API key and internet connection.");
+            speakResponse("I'm having connection issues. Please make sure the backend server is running on port 3001.");
         });
     }
 
