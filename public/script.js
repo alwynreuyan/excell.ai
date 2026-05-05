@@ -6,7 +6,7 @@
 // CONFIGURATION
 // ─────────────────────────────────────────────────────
 const CONFIG = {
-  API_PROXY: 'http://localhost:3001/api/chat', // Fixed: Full URL
+  API_PROXY: 'http://localhost:3001/api/chat',
   API_TIMEOUT: 20000,
   MAX_HISTORY: 10,
   RECONNECT_DELAY: 2000,
@@ -221,8 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if(window.speechSynthesis) window.speechSynthesis.addEventListener('voiceschanged', populateVoices);
   checkMicPermission();
   
-  // Build UI
-  buildRelayCards(); 
+  buildRelayCards();
   buildQuickChips();
   updateStatsRow();
   
@@ -253,19 +252,20 @@ function updateStatsRow() {
   const connEl = document.getElementById('stat-conn');
   const connSubEl = document.getElementById('stat-conn-sub');
   const wakeEl = document.getElementById('stat-wake');
-  
+  const wakeSubEl = document.getElementById('stat-wake-sub');
+
   if(activeEl) activeEl.textContent = Object.values(states).filter(Boolean).length;
   if(totalEl) totalEl.textContent = relays.length;
-  
+
   const connDot = document.getElementById('conn-dot');
   const ok = connDot ? connDot.classList.contains('ok') : false;
-  
-  if(connEl) connEl.textContent = ok ? '✓' : '—';
+
+  if(connEl) { connEl.textContent = ok ? '✓' : '—'; connEl.className = 'stat-value ' + (ok ? 'green' : 'accent'); }
   if(connSubEl) connSubEl.textContent = ok ? 'connected' : 'offline';
-  
+
   if(wakeEl) {
-    if (settings.wakeEnabled) { wakeEl.textContent='ON'; wakeEl.className='stat-value green'; }
-    else { wakeEl.textContent='OFF'; wakeEl.className='stat-value warn'; }
+    if (settings.wakeEnabled) { wakeEl.textContent='ON'; wakeEl.className='stat-value green'; if(wakeSubEl) wakeSubEl.textContent='active'; }
+    else { wakeEl.textContent='OFF'; wakeEl.className='stat-value'; wakeEl.style.color='var(--yellow)'; if(wakeSubEl) wakeSubEl.textContent='disabled'; }
   }
 }
 
@@ -276,34 +276,33 @@ function applyTheme(name) {
   saveSettings();
 }
 
-function getIP() { 
+function getIP() {
   const el = document.getElementById('ip-input');
-  return el ? el.value.trim() : '192.168.1.100'; 
+  return el ? el.value.trim() : '192.168.1.100';
 }
 
 async function checkConnection() {
-  const dot = document.getElementById('conn-dot'); 
+  const dot = document.getElementById('conn-dot');
   const label = document.getElementById('conn-label');
   if(!dot || !label) return;
-  
-  dot.className='conn-dot'; 
+
+  dot.className='conn-dot';
   label.textContent='Connecting…';
-  
+
   try {
     const r = await fetch(`http://${getIP()}/status`, {signal:AbortSignal.timeout(3000)});
     if(r.ok) {
       const data = await r.json();
       relays.forEach(rel=>{if(data[rel.id]!==undefined) states[rel.id]=data[rel.id];});
-      updateUI(); 
-      dot.className='conn-dot ok'; 
+      updateUI();
+      dot.className='conn-dot ok';
       label.textContent='Connected';
       log('info',`Connected → ${getIP()}`);
     } else throw new Error('Bad response');
-  } catch { 
-    dot.className='conn-dot err'; 
-    label.textContent='Offline'; 
-    // Only log if it's not a CSP error (which we fixed in server)
-    console.log(`Cannot reach ${getIP()} (This is normal if ESP32 is off)`); 
+  } catch {
+    dot.className='conn-dot err';
+    label.textContent='Offline';
+    console.log(`Cannot reach ${getIP()} (normal if ESP32 is off)`);
   }
   updateStatsRow();
 }
@@ -321,18 +320,17 @@ async function sendCmd(device, action) {
       } else states[device] = data.state??(action==='on');
       updateUI();
       const msg = `${device.toUpperCase()} turned ${action.toUpperCase()}`;
-      setStatus(`✓ ${msg}`,'ok'); 
+      setStatus(`✓ ${msg}`,'ok');
       log('ok',`${device} → ${action}`);
-      speakResponse(msg); 
+      speakResponse(msg);
       showAIResponse(msg);
-    } else { 
-      setStatus(data.error||'Failed','err'); 
-      log('err',data.error||'Command failed'); 
+    } else {
+      setStatus(data.error||'Failed','err');
+      log('err',data.error||'Command failed');
     }
   } catch(e) {
-    setStatus('ESP32 unreachable','err'); 
+    setStatus('ESP32 unreachable','err');
     log('err',`Fetch failed: ${e.message}`);
-    // Don't speak error for every click, just log it
   }
 }
 
@@ -341,15 +339,15 @@ function updateUI() {
     const on = states[r.id];
     const card = document.getElementById('card-'+r.id);
     if(!card) return;
-    
+
     card.classList.toggle('on', on);
-    
+
     const lbl = document.getElementById('state-label-'+r.id);
     if(lbl) lbl.textContent = on?'ACTIVE':'STANDBY';
-    
+
     const tlbl = document.getElementById('toggle-lbl-'+r.id);
     if(tlbl) tlbl.textContent = on?'ON':'OFF';
-    
+
     const chk = document.getElementById('toggle-'+r.id);
     if(chk) chk.checked = on;
   });
@@ -358,14 +356,14 @@ function updateUI() {
 
 function runScene(name) {
   const scenes = {morning:{light:true,fan:true}, night:{light:false,fan:false}, work:{light:true,fan:true}, relax:{light:true,heater:true}};
-  const s = scenes[name]; 
+  const s = scenes[name];
   if(!s) return;
-  
+
   relays.forEach(r=>{if(s[r.id]!==undefined) states[r.id]=s[r.id];});
-  updateUI(); 
-  log('info',`Scene: ${name}`); 
+  updateUI();
+  log('info',`Scene: ${name}`);
   setStatus(`Scene → ${name}`,'ok');
-  speakResponse(`${name} scene activated.`); 
+  speakResponse(`${name} scene activated.`);
   showAIResponse(`🌟 Scene "${name}" activated.`);
 }
 
@@ -376,9 +374,9 @@ async function processWithAI(userInput) {
   if (isProcessing) { setStatus("Processing...", "info"); return; }
   isProcessing = true;
   setStatus("Excell is thinking...", "info");
-  
+
   addToHistory('user', userInput);
-  
+
   try {
     const response = await fetch(CONFIG.API_PROXY, {
       method: 'POST',
@@ -398,40 +396,40 @@ async function processWithAI(userInput) {
     }
 
     const data = await response.json();
-    
+
     if (data.action) {
       if (data.action.type === 'control_relay') {
         await sendCmd(data.action.params.device, data.action.params.action);
         const msg = `✅ ${data.action.params.device} turned ${data.action.params.action}`;
-        showAIResponse(msg); 
-        speakResponse(msg); 
+        showAIResponse(msg);
+        speakResponse(msg);
         addToHistory('model', msg);
       } else if (data.action.type === 'run_scene') {
         runScene(data.action.params.scene);
         addToHistory('model', `Activated ${data.action.params.scene}`);
       }
     }
-    
+
     if (data.response) {
       showAIResponse(data.response);
       speakResponse(data.response);
       addToHistory('model', data.response);
     }
-    
+
     retryCount = 0;
     setStatus("Ready", "");
-    
+
   } catch (error) {
     console.error("AI Error:", error);
     if (retryCount < MAX_RETRIES && (error.message.includes('network')||error.message.includes('timeout'))) {
       retryCount++;
-      setStatus(`Retrying... (${retryCount}/${MAX_RETRIES})`, "warn");
+      setStatus(`Retrying... (${retryCount}/${MAX_RETRIES})`, "info");
       setTimeout(() => processWithAI(userInput), CONFIG.RECONNECT_DELAY * retryCount);
       return;
     }
     const fallback = "I'm having connection issues. Please try again.";
     setStatus("Connection issue", "err");
-    showAIResponse(fallback); 
+    showAIResponse(fallback);
     speakResponse(fallback);
     log('err', `AI Error: ${error.message}`);
     retryCount = 0;
@@ -454,14 +452,14 @@ function sendTextCommand() {
   const input = document.getElementById('text-cmd-input');
   const text = input ? input.value.trim() : '';
   if (!text) return;
-  
+
   const tBox = document.getElementById('transcript-display-text');
   if(tBox) tBox.textContent = text;
-  
+
   log('text-cmd', `Text: "${text}"`);
   setStatus(`Command: "${text}"`, 'info');
   processWithAI(text);
-  
+
   if(input) input.value = '';
 }
 
@@ -477,53 +475,53 @@ function startListening() {
   if (wakeListening) { try{wakeRecognition.stop();}catch{} }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { setStatus('Speech API not supported — use Chrome','err'); return; }
-  
+
   recognition = new SR();
   recognition.continuous = settings.continuousVoice;
   recognition.interimResults = true;
   recognition.lang = 'en-US';
-  
+
   recognition.onstart = () => {
     listening = true;
     const btn = document.getElementById('mic-btn');
     const lbl = document.getElementById('mic-label');
     const dot = document.getElementById('mic-live-dot');
-    
+
     if(btn) btn.classList.add('listening');
     if(lbl) lbl.textContent = 'LISTENING…';
     if(dot) dot.classList.add('active');
-    
+
     setStatus('Listening…', 'info');
     startMicSpectrum();
   };
-  
+
   recognition.onresult = (e) => {
     const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ').toLowerCase().trim();
     const tBox = document.getElementById('transcript-display-text');
     const isFinal = e.results[e.results.length-1].isFinal;
-    
+
     if(tBox) {
       tBox.textContent = `"${transcript}"`;
       tBox.classList.toggle('interim', !isFinal);
     }
-    
-    if (isFinal) { 
-      log('voice', `Heard: "${transcript}"`); 
-      processWithAI(transcript); 
+
+    if (isFinal) {
+      log('voice', `Heard: "${transcript}"`);
+      processWithAI(transcript);
     }
   };
-  
-  recognition.onerror = (e) => { 
-    setStatus(`Voice error: ${e.error}`,'err'); 
-    log('err', e.error); 
-    stopListening(); 
+
+  recognition.onerror = (e) => {
+    setStatus(`Voice error: ${e.error}`,'err');
+    log('err', e.error);
+    stopListening();
   };
-  
-  recognition.onend = () => { 
-    if(settings.continuousVoice && listening) recognition.start(); 
-    else stopListening(); 
+
+  recognition.onend = () => {
+    if(settings.continuousVoice && listening) recognition.start();
+    else stopListening();
   };
-  
+
   try { recognition.start(); } catch(e) { listening=false; stopMicSpectrum(); }
 }
 
@@ -532,20 +530,20 @@ function stopListening() {
   const btn = document.getElementById('mic-btn');
   const dot = document.getElementById('mic-live-dot');
   const lbl = document.getElementById('mic-label');
-  
+
   if(btn) btn.classList.remove('listening');
   if(dot) dot.classList.remove('active');
-  
+
   stopMicSpectrum();
-  
+
   if (recognition) { try{recognition.stop();}catch{} recognition=null; }
-  
+
   const statusEl = document.getElementById('status-text');
   if (statusEl && statusEl.textContent.startsWith('Listening')) setStatus('Ready','');
-  
+
   const tBox = document.getElementById('transcript-display-text');
   if(tBox) tBox.classList.remove('interim');
-  
+
   if (settings.wakeEnabled && !wakeListening) {
     setTimeout(startWakeWordListening, 400);
     if(lbl) lbl.textContent = 'WAKE WORD ACTIVE';
@@ -561,31 +559,31 @@ function startWakeWordListening() {
   if (wakeListening) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return;
-  
+
   wakeRecognition = new SR();
   wakeRecognition.continuous = true;
   wakeRecognition.interimResults = true;
   wakeRecognition.lang = 'en-US';
-  
+
   wakeRecognition.onstart = () => {
     wakeListening = true;
     const banner = document.getElementById('wake-banner');
     const btn = document.getElementById('mic-btn');
     const lbl = document.getElementById('mic-label');
-    
+
     if(banner) banner.classList.add('visible');
     if(btn) btn.classList.add('wake-standby');
     if(lbl) lbl.textContent = 'WAKE WORD ACTIVE';
-    
+
     log('wake', `Listening for: "${settings.wakeWord}"`);
   };
-  
+
   wakeRecognition.onresult = (e) => {
     if (listening) return;
     const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ').toLowerCase().trim();
     if (transcript.includes(settings.wakeWord.toLowerCase())) onWakeDetected();
   };
-  
+
   wakeRecognition.onerror = (e) => {
     if (e.error!=='no-speech' && e.error!=='aborted') {
       log('err', `Wake error: ${e.error}`);
@@ -593,12 +591,12 @@ function startWakeWordListening() {
       if (settings.wakeEnabled) setTimeout(startWakeWordListening, 1500);
     }
   };
-  
+
   wakeRecognition.onend = () => {
     wakeListening = false;
     if (settings.wakeEnabled && !listening) setTimeout(startWakeWordListening, 300);
   };
-  
+
   try { wakeRecognition.start(); } catch { wakeListening = false; }
 }
 
@@ -608,7 +606,7 @@ function stopWakeWordListening() {
   const banner = document.getElementById('wake-banner');
   const btn = document.getElementById('mic-btn');
   const lbl = document.getElementById('mic-label');
-  
+
   if(banner) banner.classList.remove('visible');
   if(btn) btn.classList.remove('wake-standby');
   if (!listening && lbl) lbl.textContent = 'TAP TO SPEAK';
@@ -627,57 +625,57 @@ function onWakeDetected() {
 function startCommandMode() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return;
-  
+
   recognition = new SR();
   recognition.continuous = false;
   recognition.interimResults = true;
   recognition.lang = 'en-US';
   listening = true;
-  
+
   const btn = document.getElementById('mic-btn');
   const lbl = document.getElementById('mic-label');
   const dot = document.getElementById('mic-live-dot');
-  
+
   if(btn) btn.classList.add('listening');
   if(lbl) lbl.textContent = 'LISTENING…';
   if(dot) dot.classList.add('active');
-  
+
   startMicSpectrum();
-  
+
   const timeout = setTimeout(() => {
     if (listening) { try{recognition.stop();}catch{} resetToWake(); }
   }, 5000);
-  
+
   recognition.onresult = (e) => {
     const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ').toLowerCase().trim();
     const tBox = document.getElementById('transcript-display-text');
     const isFinal = e.results[e.results.length-1].isFinal;
-    
+
     if(tBox) {
       tBox.textContent = `"${transcript}"`;
       tBox.classList.toggle('interim', !isFinal);
     }
-    
-    if (isFinal) { 
-      clearTimeout(timeout); 
-      log('voice', `Command: "${transcript}"`); 
-      processWithAI(transcript); 
+
+    if (isFinal) {
+      clearTimeout(timeout);
+      log('voice', `Command: "${transcript}"`);
+      processWithAI(transcript);
     }
   };
-  
-  recognition.onerror = (e) => { 
-    clearTimeout(timeout); 
-    setStatus(`Error: ${e.error}`,'err'); 
-    resetToWake(); 
+
+  recognition.onerror = (e) => {
+    clearTimeout(timeout);
+    setStatus(`Error: ${e.error}`,'err');
+    resetToWake();
   };
-  
-  recognition.onend = () => { 
-    clearTimeout(timeout); 
-    listening=false; 
-    stopMicSpectrum(); 
-    resetToWake(); 
+
+  recognition.onend = () => {
+    clearTimeout(timeout);
+    listening=false;
+    stopMicSpectrum();
+    resetToWake();
   };
-  
+
   try { recognition.start(); } catch { listening=false; stopMicSpectrum(); resetToWake(); }
 }
 
@@ -687,11 +685,11 @@ function resetToWake() {
   const dot = document.getElementById('mic-live-dot');
   const lbl = document.getElementById('mic-label');
   const tBox = document.getElementById('transcript-display-text');
-  
+
   if(btn) btn.classList.remove('listening');
   if(dot) dot.classList.remove('active');
   stopMicSpectrum();
-  
+
   if (settings.wakeEnabled) {
     setTimeout(startWakeWordListening, 400);
     if(lbl) lbl.textContent = 'WAKE WORD ACTIVE';
@@ -708,7 +706,7 @@ function populateVoices() {
   const voices = window.speechSynthesis?.getVoices() || [];
   const select = document.getElementById('voice-select-list');
   if (!select) return;
-  
+
   select.innerHTML = '';
   voices.filter(v=>v.lang.startsWith('en')).forEach(v => {
     const chip = document.createElement('span');
@@ -732,22 +730,13 @@ function speakResponse(text) {
   if (ttsVoice) utt.voice = ttsVoice;
   utt.rate = parseFloat(settings.ttsRate) || 1.0;
   utt.pitch = parseFloat(settings.ttsPitch) || 1.0;
-  
+
   const respEl = document.getElementById('ai-response-text');
-  
-  utt.onstart = () => { 
-    if(respEl) respEl.classList.add('speaking'); 
-    startTTSSpectrum(); 
-  };
-  utt.onend = () => { 
-    if(respEl) respEl.classList.remove('speaking'); 
-    stopTTSSpectrum(); 
-  };
-  utt.onerror = () => { 
-    if(respEl) respEl.classList.remove('speaking'); 
-    stopTTSSpectrum(); 
-  };
-  
+
+  utt.onstart = () => { if(respEl) respEl.classList.add('speaking'); startTTSSpectrum(); };
+  utt.onend = () => { if(respEl) respEl.classList.remove('speaking'); stopTTSSpectrum(); };
+  utt.onerror = () => { if(respEl) respEl.classList.remove('speaking'); stopTTSSpectrum(); };
+
   window.speechSynthesis.speak(utt);
 }
 
@@ -763,22 +752,23 @@ function testSpeech() { speakResponse('Excell AI is ready.'); }
 // ─────────────────────────────────────────────────────
 // SETTINGS & HELPERS
 // ─────────────────────────────────────────────────────
-function openSettings() { 
+function openSettings() {
   const overlay = document.getElementById('settings-overlay');
   const drawer = document.getElementById('settings-drawer');
   if(overlay) overlay.classList.add('open');
-  if(drawer) drawer.classList.add('open'); 
+  if(drawer) drawer.classList.add('open');
 }
 
-function closeSettings() { 
+function closeSettings() {
   const overlay = document.getElementById('settings-overlay');
   const drawer = document.getElementById('settings-drawer');
   if(overlay) overlay.classList.remove('open');
-  if(drawer) drawer.classList.remove('open'); 
+  if(drawer) drawer.classList.remove('open');
 }
 
 function syncSettingsUI() {
   const ttsToggle = document.getElementById('tts-toggle-setting');
+  const contVoice = document.getElementById('continuous-voice');
   const ttsRate = document.getElementById('tts-rate');
   const ttsPitch = document.getElementById('tts-pitch');
   const autoConn = document.getElementById('auto-connect');
@@ -786,15 +776,16 @@ function syncSettingsUI() {
   const wakeInput = document.getElementById('wake-word-input');
   const wakeDisplay = document.getElementById('wake-word-display');
   const wakeChip = document.getElementById('wake-status-chip');
-  
+
   if(ttsToggle) ttsToggle.checked = settings.tts;
+  if(contVoice) contVoice.checked = settings.continuousVoice;
   if(ttsRate) ttsRate.value = settings.ttsRate;
   if(ttsPitch) ttsPitch.value = settings.ttsPitch;
   if(autoConn) autoConn.checked = settings.autoConnect;
   if(wakeToggle) wakeToggle.checked = settings.wakeEnabled;
   if(wakeInput) wakeInput.value = settings.wakeWord || 'hey excell';
   if(wakeDisplay) wakeDisplay.textContent = settings.wakeWord || 'hey excell';
-  
+
   if(wakeChip) {
     wakeChip.textContent = settings.wakeEnabled ? 'ACTIVE' : 'OFF';
     wakeChip.classList.toggle('active', settings.wakeEnabled);
@@ -807,48 +798,49 @@ function onPitchChange(v) { settings.ttsPitch = parseFloat(v); saveSettings(); }
 function onAutoConnectToggle(v) { settings.autoConnect = v; saveSettings(); }
 function onContinuousToggle(v) { settings.continuousVoice = v; if(!v && listening) stopListening(); saveSettings(); }
 
-function onWakeToggle(v) { 
-  settings.wakeEnabled = v; 
-  saveSettings(); 
-  if(v) startWakeWordListening(); 
-  else stopWakeWordListening(); 
-  updateStatsRow(); 
+function onWakeToggle(v) {
+  settings.wakeEnabled = v;
+  saveSettings();
+  if(v) startWakeWordListening();
+  else stopWakeWordListening();
+  updateStatsRow();
+  syncSettingsUI();
 }
 
 function saveWakeWord() {
   const input = document.getElementById('wake-word-input');
   const val = input ? input.value.trim().toLowerCase() : '';
   if (!val) return;
-  
-  settings.wakeWord = val; 
+
+  settings.wakeWord = val;
   saveSettings();
-  
+
   const display = document.getElementById('wake-word-display');
   if(display) display.textContent = val;
-  
-  updateStatsRow(); 
+
+  updateStatsRow();
   log('info', `Wake word: "${val}"`);
-  showAIResponse(`Wake word: "${val}"`);
-  
-  if (settings.wakeEnabled) { 
-    stopWakeWordListening(); 
-    setTimeout(startWakeWordListening, 400); 
+  showAIResponse(`Wake word set: "${val}"`);
+
+  if (settings.wakeEnabled) {
+    stopWakeWordListening();
+    setTimeout(startWakeWordListening, 400);
   }
 }
 
 function saveRelays() { localStorage.setItem('vr_relays', JSON.stringify(relays)); }
 function saveSettings() { localStorage.setItem('vr_settings', JSON.stringify(settings)); }
 
-function setStatus(msg, cls) { 
-  const el = document.getElementById('status-text'); 
+function setStatus(msg, cls) {
+  const el = document.getElementById('status-text');
   if(el) { el.textContent = msg; el.className = cls||''; }
 }
 
-function showAIResponse(msg) { 
-  const el = document.getElementById('ai-response-text'); 
-  if(!el) return; 
-  el.textContent = msg; 
-  log('ai', msg.substring(0,80)+(msg.length>80?'…':'')); 
+function showAIResponse(msg) {
+  const el = document.getElementById('ai-response-text');
+  if(!el) return;
+  el.textContent = msg;
+  log('ai', msg.substring(0,80)+(msg.length>80?'…':''));
 }
 
 function log(type, msg) {
@@ -858,38 +850,38 @@ function log(type, msg) {
   const entry = document.createElement('div');
   entry.className = `log-entry ${type}`;
   entry.innerHTML = `<span class="ts">[${ts}]</span><span class="msg">${escHtml(msg)}</span>`;
-  box.appendChild(entry); 
+  box.appendChild(entry);
   box.scrollTop = box.scrollHeight;
 }
 
-function clearLog() { 
+function clearLog() {
   const box = document.getElementById('log-box');
-  if(box) box.innerHTML = ''; 
+  if(box) box.innerHTML = '';
 }
 
-function escHtml(s) { 
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); 
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ─────────────────────────────────────────────────────
-// MODAL & RELAY FUNCTIONS (FIXED)
+// MODAL & RELAY FUNCTIONS
 // ─────────────────────────────────────────────────────
-function openAddModal() { 
-  modalMode='add'; 
-  editingRelayId=null; 
-  selectedPin=null; 
-  selectedEmoji='💡'; 
-  prepModal('➕ ADD RELAY','SAVE RELAY'); 
+function openAddModal() {
+  modalMode='add';
+  editingRelayId=null;
+  selectedPin=null;
+  selectedEmoji='💡';
+  prepModal('➕ ADD NEW RELAY','SAVE RELAY');
 }
 
-function openEditModal(id) { 
-  const r=relays.find(x=>x.id===id); 
-  if(!r)return; 
-  modalMode='edit'; 
-  editingRelayId=id; 
-  selectedPin=r.pin; 
-  selectedEmoji=r.icon; 
-  prepModal('✏ EDIT','UPDATE',r); 
+function openEditModal(id) {
+  const r=relays.find(x=>x.id===id);
+  if(!r) return;
+  modalMode='edit';
+  editingRelayId=id;
+  selectedPin=r.pin;
+  selectedEmoji=r.icon;
+  prepModal('✏ EDIT RELAY','UPDATE',r);
 }
 
 function prepModal(title,btnText,r=null) {
@@ -902,7 +894,7 @@ function prepModal(title,btnText,r=null) {
   const errEl = document.getElementById('modal-error');
   const pinErr = document.getElementById('pin-error');
   const modal = document.getElementById('relay-modal');
-  
+
   if(titleEl) titleEl.textContent=title;
   if(saveBtn) saveBtn.textContent=btnText;
   if(nameEl) nameEl.value=r?.name||'';
@@ -911,15 +903,15 @@ function prepModal(title,btnText,r=null) {
   if(initEl) initEl.value=r?.initState||'off';
   if(errEl) errEl.classList.remove('visible');
   if(pinErr) pinErr.classList.remove('visible');
-  
-  buildPinGrid(r?.pin); 
+
+  buildPinGrid(r?.pin);
   buildEmojiPicker(r?.icon||'💡');
   if(modal) modal.classList.add('open');
 }
 
-function closeRelayModal() { 
+function closeRelayModal() {
   const modal = document.getElementById('relay-modal');
-  if(modal) modal.classList.remove('open'); 
+  if(modal) modal.classList.remove('open');
 }
 
 function buildPinGrid(cur) {
@@ -927,16 +919,16 @@ function buildPinGrid(cur) {
   if(!grid) return;
   const used=relays.map(r=>r.pin).filter(p=>p!==undefined);
   grid.innerHTML=ESP32_PINS.map(p=>{
-    const usedPin=used.includes(p)&&p!==cur, sel=p===cur;
+    const usedPin=used.includes(p)&&p!==cur, sel=p===cur||p===selectedPin;
     return `<div class="pin-opt ${usedPin?'used':''} ${sel?'selected':''}" onclick="${usedPin?'':'selectPin('+p+')'}">GPIO<br>${p}</div>`;
   }).join('');
 }
 
-function selectPin(p) { 
-  selectedPin=p; 
-  buildPinGrid(p); 
+function selectPin(p) {
+  selectedPin=p;
+  buildPinGrid(p);
   const pinErr = document.getElementById('pin-error');
-  if(pinErr) pinErr.classList.remove('visible'); 
+  if(pinErr) pinErr.classList.remove('visible');
 }
 
 function buildEmojiPicker(cur) {
@@ -948,9 +940,9 @@ function buildEmojiPicker(cur) {
   ).join('');
 }
 
-function selectEmoji(e) { 
-  selectedEmoji=e; 
-  document.querySelectorAll('#modal-emoji-picker .emoji-opt').forEach(el=>el.classList.toggle('selected',el.textContent===e)); 
+function selectEmoji(e) {
+  selectedEmoji=e;
+  document.querySelectorAll('#modal-emoji-picker .emoji-opt').forEach(el=>el.classList.toggle('selected',el.textContent===e));
 }
 
 function saveRelay() {
@@ -962,14 +954,14 @@ function saveRelay() {
   const type=typeEl ? typeEl.value : 'normal';
   const initEl=document.getElementById('modal-init');
   const init=initEl ? initEl.value : 'off';
-  
-  const errEl=document.getElementById('modal-error'); 
+
+  const errEl=document.getElementById('modal-error');
   const pinErr=document.getElementById('pin-error');
-  
-  if(errEl) errEl.classList.remove('visible'); 
-  if(pinErr) pinErr.classList.remove('visible'); 
+
+  if(errEl) errEl.classList.remove('visible');
+  if(pinErr) pinErr.classList.remove('visible');
   if(nameEl) nameEl.classList.remove('error');
-  
+
   if(!name){
     if(nameEl) nameEl.classList.add('error');
     if(errEl){errEl.textContent='Name required.';errEl.classList.add('visible');}
@@ -979,103 +971,133 @@ function saveRelay() {
     if(pinErr) pinErr.classList.add('visible');
     return;
   }
-  
+
   const id=name.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
-  
+
   if(modalMode==='add') {
     if(relays.some(r=>r.id===id)){
-      if(errEl){errEl.textContent='Already exists.';errEl.classList.add('visible');}
+      if(errEl){errEl.textContent='A relay with this name already exists.';errEl.classList.add('visible');}
       return;
     }
     relays.push({id,icon:selectedEmoji,name,desc,pin:selectedPin,type,initState:init});
-    states[id]=init==='on'; 
-    log('info',`Added: ${name}`); 
-    showAIResponse(`Added ${name}`); 
+    states[id]=init==='on';
+    log('info',`Added: ${name}`);
+    showAIResponse(`Added ${name}`);
     speakResponse(`Created ${name}`);
   } else {
-    const idx=relays.findIndex(r=>r.id===editingRelayId); 
-    if(idx===-1)return;
+    const idx=relays.findIndex(r=>r.id===editingRelayId);
+    if(idx===-1) return;
     const newId=name.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
     const prev=states[editingRelayId];
     if(newId!==editingRelayId) {
       if(relays.some((r,i)=>r.id===newId&&i!==idx)){
-        if(errEl){errEl.textContent='Already exists.';errEl.classList.add('visible');}
+        if(errEl){errEl.textContent='A relay with this name already exists.';errEl.classList.add('visible');}
         return;
       }
-      delete states[editingRelayId]; 
+      delete states[editingRelayId];
       states[newId]=prev;
     }
     relays[idx]={id:newId,icon:selectedEmoji,name,desc,pin:selectedPin,type,initState:init};
-    log('info',`Updated: ${name}`); 
+    log('info',`Updated: ${name}`);
     showAIResponse(`Updated ${name}`);
   }
-  saveRelays(); 
-  buildRelayCards(); 
+  saveRelays();
+  buildRelayCards();
+  updateStatsRow();
   closeRelayModal();
 }
 
 function confirmDeleteRelay(id) {
-  const r=relays.find(x=>x.id===id); 
-  if(!r)return;
-  if(!confirm(`Delete "${r.name}"?`))return;
-  relays=relays.filter(x=>x.id!==id); 
+  const r=relays.find(x=>x.id===id);
+  if(!r) return;
+  if(!confirm(`Delete "${r.name}"?`)) return;
+  relays=relays.filter(x=>x.id!==id);
   delete states[id];
-  saveRelays(); 
-  buildRelayCards(); 
-  log('info',`Deleted: ${r.name}`); 
+  saveRelays();
+  buildRelayCards();
+  updateStatsRow();
+  log('info',`Deleted: ${r.name}`);
   showAIResponse(`Deleted ${r.name}`);
 }
 
-// ✅ CRITICAL: This function was missing or broken
+// ─────────────────────────────────────────────────────
+// BUILD RELAY CARDS — uses CSS class names from style.css
+// ─────────────────────────────────────────────────────
 function buildRelayCards() {
   const grid = document.getElementById('relays-grid');
-  const chipsContainer = document.getElementById('quick-chips');
   if(!grid) return;
-  
+
   grid.innerHTML = relays.map(r => {
     const isOn = states[r.id];
     return `
     <div class="relay-card ${isOn?'on':''}" id="card-${r.id}">
-      <div class="relay-header">
-        <div class="relay-icon">${r.icon}</div>
-        <div class="relay-actions">
-          <button class="icon-btn" onclick="openEditModal('${r.id}')" title="Edit">✏️</button>
-          <button class="icon-btn" onclick="confirmDeleteRelay('${r.id}')" title="Delete" style="color:var(--red)">🗑️</button>
+      <div class="relay-top">
+        <div>
+          <div class="relay-name">${escHtml(r.name)}</div>
+          <div class="relay-desc">${escHtml(r.desc||'')}</div>
+          <div class="relay-pin-badge">GPIO ${r.pin}</div>
         </div>
+        <div class="relay-icon-wrap">${r.icon}</div>
       </div>
-      <div class="relay-name">${r.name}</div>
-      <div class="relay-desc">${r.desc||''}</div>
-      <div class="relay-state-label" id="state-label-${r.id}">${isOn?'ACTIVE':'STANDBY'}</div>
-      <div class="relay-toggle-wrap">
-        <label class="relay-toggle">
-          <input type="checkbox" id="toggle-${r.id}" ${isOn?'checked':''} onchange="onToggle('${r.id}',this.checked)">
+      <div class="relay-state">
+        <div class="relay-state-dot"></div>
+        <span id="state-label-${r.id}">${isOn?'ACTIVE':'STANDBY'}</span>
+      </div>
+      <div class="toggle-wrap">
+        <label class="toggle">
+          <input type="checkbox" id="toggle-${r.id}" ${isOn?'checked':''} data-toggle-id="${r.id}">
           <div class="toggle-track"></div>
           <div class="toggle-thumb"></div>
         </label>
-        <div class="toggle-text" id="toggle-lbl-${r.id}">${isOn?'ON':'OFF'}</div>
+        <span class="toggle-label" id="toggle-lbl-${r.id}">${isOn?'ON':'OFF'}</span>
       </div>
-    </div>
-    `;
-  }).join('');
-  
+      <div class="relay-btns">
+        <button class="rbtn on"  data-action="on"     data-id="${r.id}">ON</button>
+        <button class="rbtn off" data-action="off"    data-id="${r.id}">OFF</button>
+        <button class="rbtn"     data-action="toggle" data-id="${r.id}">TOGGLE</button>
+      </div>
+      <div class="relay-actions">
+        <button class="relay-action-btn"        data-action="edit"   data-id="${r.id}">✏ EDIT</button>
+        <button class="relay-action-btn danger" data-action="delete" data-id="${r.id}">🗑 DELETE</button>
+      </div>
+    </div>`;
+  }).join('') + `
+    <div class="relay-card add-card">
+      <div class="add-card-inner" data-action="add">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>ADD RELAY</span>
+      </div>
+    </div>`;
+
   buildQuickChips();
 }
 
 function buildQuickChips() {
-  const container=document.getElementById('quick-chips');
+  const container = document.getElementById('quick-chips');
   if(!container) return;
-  const extra=[{l:'all on',f:()=>sendCmd('all','on')},{l:'all off',f:()=>sendCmd('all','off')},{l:'refresh',f:checkConnection}];
-  const chips=relays.flatMap(r=>[{l:`${r.name.toLowerCase()} on`,f:()=>sendCmd(r.id,'on')},{l:`${r.name.toLowerCase()} off`,f:()=>sendCmd(r.id,'off')}]);
-  const all=[...chips,...extra];
-  container.innerHTML=all.map((c,i)=>`<span class="chip" onclick="window._chips[${i}].f()">${c.l}</span>`).join('');
-  window._chips=all;
+
+  const extra = [
+    {l:'all on',  cmd:'all',         state:'on'},
+    {l:'all off', cmd:'all',         state:'off'},
+    {l:'refresh', cmd:'__refresh__', state:''},
+  ];
+
+  const chips = relays.flatMap(r => [
+    {l:`${r.name.toLowerCase()} on`,  cmd:r.id, state:'on'},
+    {l:`${r.name.toLowerCase()} off`, cmd:r.id, state:'off'},
+  ]);
+
+  container.innerHTML = [...chips, ...extra].map(c =>
+    `<span class="chip" data-chip-cmd="${escHtml(c.cmd)}" data-chip-state="${escHtml(c.state)}">${escHtml(c.l)}</span>`
+  ).join('');
+}
+function onToggle(id,checked) {
+  sendCmd(id,checked?'on':'off');
 }
 
-function onToggle(id,checked) { 
-  sendCmd(id,checked?'on':'off'); 
-}
-
-// Expose functions to window for inline HTML onclick handlers
+// ─────────────────────────────────────────────────────
+// WINDOW EXPORTS
+// ─────────────────────────────────────────────────────
 window.sendTextCommand = sendTextCommand;
 window.sendCmd = sendCmd;
 window.runScene = runScene;
@@ -1103,3 +1125,87 @@ window.onWakeToggle = onWakeToggle;
 window.saveWakeWord = saveWakeWord;
 window.clearLog = clearLog;
 window.applyTheme = applyTheme;
+
+// ── INLINE HANDLERS ──────────────────────────────────
+(function () {
+  function on(id, event, fn) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener(event, fn);
+  }
+  function onAll(sel, event, fn) {
+    document.querySelectorAll(sel).forEach(function(el){ el.addEventListener(event, fn); });
+  }
+
+  function init() {
+    on('nav-voice',           'click', function(){ document.getElementById('voice-panel').scrollIntoView({behavior:'smooth'}); });
+    on('nav-add-relay',       'click', function(){ openAddModal(); });
+    on('nav-settings',        'click', function(){ openSettings(); });
+    on('btn-topbar-settings', 'click', function(){ openSettings(); });
+    on('btn-ping',            'click', function(){ checkConnection(); });
+    on('mic-btn',             'click', function(){ toggleListening(); });
+    on('btn-perm-grant',      'click', function(){ requestMicPermission(); });
+    on('btn-text-send',       'click', function(){ sendTextCommand(); });
+    on('btn-tts-stop',        'click', function(){ stopSpeaking(); });
+    on('btn-tts-test',        'click', function(){ testSpeech(); });
+    on('btn-clear-log',       'click', function(){ clearLog(); });
+    on('btn-modal-close',     'click', function(){ closeRelayModal(); });
+    on('btn-modal-cancel',    'click', function(){ closeRelayModal(); });
+    on('modal-save-btn',      'click', function(){ saveRelay(); });
+    on('settings-overlay',    'click', function(){ closeSettings(); });
+    on('btn-settings-close',  'click', function(){ closeSettings(); });
+    on('btn-save-wake-word',  'click', function(){ saveWakeWord(); });
+    on('btn-test-conn',       'click', function(){ checkConnection(); });
+    on('btn-reset-relays',    'click', function(){
+      if(confirm('Reset all relays to defaults?')){ localStorage.removeItem('vr_relays'); location.reload(); }
+    });
+    on('text-cmd-input', 'keydown', function(e){ if(e.key==='Enter') sendTextCommand(); });
+    on('wake-word-input', 'keydown', function(e){ if(e.key==='Enter') saveWakeWord(); });
+    on('wake-toggle-setting', 'change', function(){ onWakeToggle(this.checked); });
+    on('tts-toggle-setting',  'change', function(){ onTTSToggle(this.checked); });
+    on('continuous-voice',    'change', function(){ onContinuousToggle(this.checked); });
+    on('auto-connect',        'change', function(){ onAutoConnectToggle(this.checked); });
+    on('tts-rate',  'input', function(){ onRateChange(this.value); });
+    on('tts-pitch', 'input', function(){ onPitchChange(this.value); });
+
+    onAll('.scene-btn[data-scene]',  'click', function(){ runScene(this.dataset.scene); });
+    onAll('.all-btn[data-cmd]',      'click', function(){ sendCmd(this.dataset.cmd, this.dataset.state); });
+    onAll('.theme-swatch[data-theme]','click', function(){ applyTheme(this.dataset.theme); });
+
+    // Relay card delegation
+    var grid = document.getElementById('relays-grid');
+    if(grid){
+      grid.addEventListener('click', function(e){
+        var btn = e.target.closest('[data-action]');
+        if(!btn) return;
+        var action = btn.dataset.action;
+        var id = btn.dataset.id;
+        if(action==='on')     sendCmd(id,'on');
+        if(action==='off')    sendCmd(id,'off');
+        if(action==='toggle') sendCmd(id,'toggle');
+        if(action==='edit')   openEditModal(id);
+        if(action==='delete') confirmDeleteRelay(id);
+        if(action==='add')    openAddModal();
+      });
+      grid.addEventListener('change', function(e){
+        var chk = e.target.closest('[data-toggle-id]');
+        if(chk) onToggle(chk.dataset.toggleId, chk.checked);
+      });
+    }
+
+    // Quick chips delegation
+    on('quick-chips', 'click', function(e){
+      var chip = e.target.closest('.chip');
+      if(!chip) return;
+      var cmd = chip.dataset.chipCmd;
+      var state = chip.dataset.chipState;
+      if(cmd==='__refresh__') checkConnection();
+      else sendCmd(cmd, state);
+    });
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
