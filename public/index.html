@@ -973,7 +973,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.speechSynthesis?.addEventListener('voiceschanged', populateVoices);
 
   checkMicPermission();
-  buildRelayCards();
+  if (typeof buildRelayCards === 'function') buildRelayCards();
   updateStatsRow();
   startClock();
   resizeCanvas();
