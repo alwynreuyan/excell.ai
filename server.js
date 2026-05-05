@@ -18,6 +18,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const crypto = require('crypto');
 
 // ─────────────────────────────────────────────────────
 // CONFIGURATION
@@ -27,6 +28,7 @@ const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.GEMINI_API_KEY;
 const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const AUTH_TOKEN = process.env.AUTH_TOKEN || crypto.randomBytes(32).toString('hex');
 
 // Validate API key
 if (!API_KEY) {
@@ -46,12 +48,12 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-      connectSrc: ["'self'", "https://generativelanguage.googleapis.com", "http://localhost:*"],
+      connectSrc: ["'self'", "https://generativelanguage.googleapis.com"],
       imgSrc: ["'self'", "data:", "https:"],
-      upgradeInsecureRequests: null,
+      upgradeInsecureRequests: [],
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -70,7 +72,8 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost')) {
+    // Strict origin validation - no partial matches
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     console.warn(`⚠️ Blocked origin: ${origin}`);
@@ -94,6 +97,34 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => req.ip,
 });
+
+// Authentication middleware for API endpoints
+const authenticateToken = (req, res, next) => {
+  // Skip auth for health and config endpoints
+  if (req.path === '/api/health' || req.path === '/api/config') {
+    return next();
+  }
+  
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  
+  if (!token) {
+    return res.status(401).json({ 
+      error: 'unauthorized',
+      response: 'Authentication required. Please provide a valid token.'
+    });
+  }
+  
+  if (token !== AUTH_TOKEN) {
+    console.warn(`⚠️ Invalid auth token attempt from ${req.ip}`);
+    return res.status(403).json({ 
+      error: 'forbidden',
+      response: 'Invalid authentication token.'
+    });
+  }
+  
+  next();
+};
 
 // ─────────────────────────────────────────────────────
 // SERVE STATIC FILES (FRONTEND)
@@ -122,7 +153,8 @@ app.get('*', (req, res, next) => {
 // GOOGLE AI STUDIO API PROXY
 // ─────────────────────────────────────────────────────
 
-const AI_STUDIO_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
+// Note: API key is now passed via X-Goog-Api-Key header instead of URL parameter
+const AI_STUDIO_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 const CONFIG = {
   DEVICES: ['light', 'fan', 'pump', 'heater', 'all'],
@@ -165,13 +197,14 @@ User: "turn off everything"
 
 IMPORTANT: Return valid JSON only. No markdown, no explanations outside JSON.`;
 
-app.post('/api/chat', apiLimiter, async (req, res) => {
+app.post('/api/chat', apiLimiter, authenticateToken, async (req, res) => {
   const startTime = Date.now();
   
   try {
     const { message, history = [], devices = [], states = {} } = req.body;
     
-    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+    // Input validation
+    if (!message || typeof message !== 'string') {
       return res.status(400).json({ 
         error: 'invalid_input',
         response: "I didn't catch that. Could you try again?"
@@ -179,7 +212,34 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
     }
     
     const trimmedMessage = message.trim();
-    console.log(`🔍 [${new Date().toISOString()}] Request: "${trimmedMessage.substring(0, 100)}..."`);
+    
+    if (trimmedMessage.length === 0 || trimmedMessage.length > 2000) {
+      return res.status(400).json({ 
+        error: 'invalid_input',
+        response: "Message must be between 1 and 2000 characters."
+      });
+    }
+    
+    // Validate history array
+    if (!Array.isArray(history)) {
+      return res.status(400).json({ 
+        error: 'invalid_input',
+        response: "Invalid history format."
+      });
+    }
+    
+    // Validate states object depth and size
+    if (states && typeof states === 'object') {
+      const stateKeys = Object.keys(states);
+      if (stateKeys.length > 50) {
+        return res.status(400).json({ 
+          error: 'invalid_input',
+          response: "Too many device states provided."
+        });
+      }
+    }
+    
+    console.log(`🔍 [${new Date().toISOString()}] Request: "${trimmedMessage.substring(0, 50)}..."`);
 
     const contents = [
       { role: 'user', parts: [{ text: SYSTEM_PROMPT }] },
@@ -235,11 +295,15 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
       ]
     }];
 
-    const aiResponse = await fetch(AI_STUDIO_URL, {
+    // Use Authorization header instead of URL query parameter for API key
+    const aiStudioUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+    
+    const aiResponse = await fetch(aiStudioUrl, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
-        'User-Agent': 'Excell-AI/1.0'
+        'User-Agent': 'Excell-AI/1.0',
+        'X-Goog-Api-Key': API_KEY
       },
       body: JSON.stringify({
         contents,
@@ -367,10 +431,18 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
     const latency = Date.now() - startTime;
     console.error(`❌ Chat error after ${latency}ms:`, error.message);
     
+    // Sanitize error message - never expose internal details
+    let safeErrorMessage = "I'm having trouble connecting right now. Please check your internet and try again.";
+    
+    // Only provide specific guidance for known client errors
+    if (error.name === 'AbortError') {
+      safeErrorMessage = "Request timed out. Please try again.";
+    }
+    
     res.status(500).json({ 
       error: 'internal_error',
-      response: "I'm having trouble connecting right now. Please check your internet and try again.",
-      debug: NODE_ENV === 'development' ? error.message : undefined
+      response: safeErrorMessage
+      // Never expose debug information, even in development
     });
   }
 });
@@ -402,7 +474,7 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error('💥 Unhandled error:', err);
+  console.error('💥 Unhandled error:', err.message); // Log only message, not full stack
   
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     return res.status(400).json({ error: 'invalid_json', message: 'Invalid JSON in request' });
@@ -412,9 +484,10 @@ app.use((err, req, res, next) => {
     return res.status(403).json({ error: 'cors_error', message: 'Origin not allowed' });
   }
   
+  // Never expose internal error details to clients
   res.status(500).json({ 
     error: 'server_error', 
-    message: NODE_ENV === 'development' ? err.message : 'Internal server error'
+    message: 'Internal server error'
   });
 });
 
