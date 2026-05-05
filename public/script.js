@@ -29,7 +29,7 @@ let relays = JSON.parse(localStorage.getItem('vr_relays') || 'null') || DEFAULT_
 let states = {};
 let settings = JSON.parse(localStorage.getItem('vr_settings') || 'null') || {
   theme:'cyber',tts:true,ttsRate:1.0,ttsPitch:1.0,ttsVoiceName:'',
-  autoConnect:true,continuousVoice:false,wakeWord:'hey excell',wakeEnabled:false,
+  autoConnect:true,continuousVoice:false,wakeWords:['hey excell'],wakeEnabled:false,wakeStrictness:2,
 };
 relays.forEach(r => states[r.id] = r.initState === 'on');
 
@@ -214,7 +214,8 @@ function updatePermBanner() {
 // ─────────────────────────────────────────────────────
 // INIT & CORE FUNCTIONS
 // ─────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => { if (typeof settings.wakeWord === 'string' && !settings.wakeWords) { settings.wakeWords = [settings.wakeWord]; delete settings.wakeWord; saveSettings(); }
+  
   applyTheme(settings.theme);
   syncSettingsUI();
   populateVoices();
@@ -552,7 +553,7 @@ function startWakeWordListening() {
   wakeRecognition.continuous = true;
   wakeRecognition.interimResults = true;
   wakeRecognition.lang = 'en-US';
-  wakeRecognition.maxAlternatives = 3;
+  wakeRecognition.maxAlternatives = 5;
 
   wakeRecognition.onstart = () => {
     wakeListening = true;
@@ -565,21 +566,22 @@ function startWakeWordListening() {
     log('wake', `Listening for: "${settings.wakeWord}"`);
   };
 
-  wakeRecognition.onresult = (e) => {
+wakeRecognition.onresult = (e) => {
     if (listening) return;
-    // Check ALL alternatives from ALL results for best wake word detection
+    const words = settings.wakeWords || [];
+    const strictness = settings.wakeStrictness || 2;
     for (let i = e.resultIndex; i < e.results.length; i++) {
       for (let j = 0; j < e.results[i].length; j++) {
         const t = e.results[i][j].transcript.toLowerCase().trim();
-        if (t.includes(settings.wakeWord.toLowerCase())) {
-          log('wake', `Detected: "${t}"`);
-          onWakeDetected();
-          return;
-        }
+        const matched = words.some(w => {
+          if (strictness === 3) return t === w;                    // exact match
+          if (strictness === 2) return t.includes(w);             // contains
+          if (strictness === 1) return t.includes(w.split(' ')[0]); // first word only
+        });
+        if (matched) { log('wake', `Detected: "${t}"`); onWakeDetected(); return; }
       }
     }
   };
-
   wakeRecognition.onerror = (e) => {
     wakeListening = false;
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
@@ -834,9 +836,9 @@ function syncSettingsUI() {
   const ttsPitch = document.getElementById('tts-pitch');
   const autoConn = document.getElementById('auto-connect');
   const wakeToggle = document.getElementById('wake-toggle-setting');
-  const wakeInput = document.getElementById('wake-word-input');
-  const wakeDisplay = document.getElementById('wake-word-display');
   const wakeChip = document.getElementById('wake-status-chip');
+  const strictSlider = document.getElementById('wake-strictness');
+  const strictLabel = document.getElementById('strictness-label');
 
   if(ttsToggle) ttsToggle.checked = settings.tts;
   if(contVoice) contVoice.checked = settings.continuousVoice;
@@ -844,13 +846,14 @@ function syncSettingsUI() {
   if(ttsPitch) ttsPitch.value = settings.ttsPitch;
   if(autoConn) autoConn.checked = settings.autoConnect;
   if(wakeToggle) wakeToggle.checked = settings.wakeEnabled;
-  if(wakeInput) wakeInput.value = settings.wakeWord || 'hey excell';
-  if(wakeDisplay) wakeDisplay.textContent = settings.wakeWord || 'hey excell';
+  if(strictSlider) strictSlider.value = settings.wakeStrictness || 2;
+  if(strictLabel) strictLabel.textContent = ['','LOOSE','MEDIUM','STRICT'][settings.wakeStrictness || 2];
 
   if(wakeChip) {
     wakeChip.textContent = settings.wakeEnabled ? 'ACTIVE' : 'OFF';
     wakeChip.classList.toggle('active', settings.wakeEnabled);
   }
+  renderWakeTags();
 }
 
 function onTTSToggle(v) { settings.tts = v; if(!v) stopSpeaking(); saveSettings(); }
@@ -862,41 +865,62 @@ function onContinuousToggle(v) { settings.continuousVoice = v; if(!v && listenin
 function onWakeToggle(v) {
   settings.wakeEnabled = v;
   saveSettings();
-  if (v) {
-    // Need mic permission first
-    if (micPermission !== 'granted') {
-      requestMicPermission().then(() => {
-        if (micPermission === 'granted') startWakeWordListening();
-      });
-    } else {
-      startWakeWordListening();
-    }
-  } else {
-    stopWakeWordListening();
-  }
+  if(v) startWakeWordListening();
+  else stopWakeWordListening();
   updateStatsRow();
   syncSettingsUI();
 }
 
-function saveWakeWord() {
+function addWakeWord() {
   const input = document.getElementById('wake-word-input');
   const val = input ? input.value.trim().toLowerCase() : '';
   if (!val) return;
-
-  settings.wakeWord = val;
-  saveSettings();
-
-  const display = document.getElementById('wake-word-display');
-  if(display) display.textContent = val;
-
-  updateStatsRow();
-  log('info', `Wake word: "${val}"`);
-  showAIResponse(`Wake word set: "${val}"`);
-
-  if (settings.wakeEnabled) {
-    stopWakeWordListening();
-    setTimeout(startWakeWordListening, 400);
+  if (!Array.isArray(settings.wakeWords)) settings.wakeWords = [];
+  if (settings.wakeWords.includes(val)) {
+    log('info', `"${val}" already exists`); return;
   }
+  settings.wakeWords.push(val);
+  saveSettings();
+  if(input) input.value = '';
+  renderWakeTags();
+  updateWakeBanner();
+  updateStatsRow();
+  log('info', `Wake word added: "${val}"`);
+  if (settings.wakeEnabled) { stopWakeWordListening(); setTimeout(startWakeWordListening, 300); }
+}
+
+function removeWakeWord(idx) {
+  if (!Array.isArray(settings.wakeWords)) return;
+  const removed = settings.wakeWords.splice(idx, 1);
+  saveSettings();
+  renderWakeTags();
+  updateWakeBanner();
+  log('info', `Wake word removed: "${removed[0]}"`);
+  if (settings.wakeEnabled) { stopWakeWordListening(); setTimeout(startWakeWordListening, 300); }
+}
+
+function renderWakeTags() {
+  const list = document.getElementById('wake-tags-list');
+  if (!list) return;
+  const words = settings.wakeWords || [];
+  if (words.length === 0) {
+    list.innerHTML = '<span class="wake-tags-empty">No wake words yet.</span>'; return;
+  }
+  list.innerHTML = words.map((w, i) =>
+    `<span class="wake-tag">${w}<button class="wake-tag-remove" data-idx="${i}" title="Remove">✕</button></span>`
+  ).join('');
+}
+
+function updateWakeBanner() {
+  const display = document.getElementById('wake-word-display');
+  if(display) display.textContent = (settings.wakeWords || []).join(' / ') || 'none';
+}
+
+function onStrictnessChange(v) {
+  settings.wakeStrictness = parseInt(v);
+  const label = document.getElementById('strictness-label');
+  if(label) label.textContent = ['','LOOSE','MEDIUM','STRICT'][settings.wakeStrictness];
+  saveSettings();
 }
 
 function saveRelays() { localStorage.setItem('vr_relays', JSON.stringify(relays)); }
@@ -1199,7 +1223,8 @@ window.onPitchChange = onPitchChange;
 window.onAutoConnectToggle = onAutoConnectToggle;
 window.onContinuousToggle = onContinuousToggle;
 window.onWakeToggle = onWakeToggle;
-window.saveWakeWord = saveWakeWord;
+window.addWakeWord = addWakeWord;
+window.removeWakeWord = removeWakeWord;
 window.clearLog = clearLog;
 window.applyTheme = applyTheme;
 
@@ -1230,13 +1255,18 @@ window.applyTheme = applyTheme;
     on('modal-save-btn',      'click', function(){ saveRelay(); });
     on('settings-overlay',    'click', function(){ closeSettings(); });
     on('btn-settings-close',  'click', function(){ closeSettings(); });
-    on('btn-save-wake-word',  'click', function(){ saveWakeWord(); });
+    on('btn-save-wake-word', 'click', function(){ addWakeWord(); });
+    on('wake-strictness', 'input', function(){ onStrictnessChange(this.value); });
     on('btn-test-conn',       'click', function(){ checkConnection(); });
     on('btn-reset-relays',    'click', function(){
       if(confirm('Reset all relays to defaults?')){ localStorage.removeItem('vr_relays'); location.reload(); }
     });
     on('text-cmd-input', 'keydown', function(e){ if(e.key==='Enter') sendTextCommand(); });
-    on('wake-word-input', 'keydown', function(e){ if(e.key==='Enter') saveWakeWord(); });
+   on('wake-word-input', 'keydown', function(e){ if(e.key==='Enter') addWakeWord(); });
+on('wake-tags-list', 'click', function(e){
+  const btn = e.target.closest('.wake-tag-remove');
+  if(btn) removeWakeWord(parseInt(btn.dataset.idx));
+}); 
     on('wake-toggle-setting', 'change', function(){ onWakeToggle(this.checked); });
     on('tts-toggle-setting',  'change', function(){ onTTSToggle(this.checked); });
     on('continuous-voice',    'change', function(){ onContinuousToggle(this.checked); });

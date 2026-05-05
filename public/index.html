@@ -243,7 +243,43 @@
     </div>
   </div>
   <div class="settings-section">
-    <div class="settings-section-title">🎙 WAKE WORD DETECTION</div>
+    <div class="settings-section">
+  <div class="settings-section-title">🎙 WAKE WORD DETECTION</div>
+  <div class="settings-row">
+    <span class="settings-row-label">Enable Wake Word</span>
+    <label class="mini-toggle">
+      <input type="checkbox" id="wake-toggle-setting">
+      <div class="mini-track"></div><div class="mini-thumb"></div>
+    </label>
+  </div>
+
+  <!-- Wake words tag list -->
+  <div style="display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--panel2);border-radius:var(--radius-sm);">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <span class="settings-row-label" style="font-family:var(--mono);font-size:.68rem;color:var(--muted);">WAKE WORDS</span>
+      <span class="wake-status-chip" id="wake-status-chip">OFF</span>
+    </div>
+    <div class="wake-tags-list" id="wake-tags-list">
+      <span class="wake-tags-empty">No wake words yet.</span>
+    </div>
+    <div class="wake-word-input-wrap" style="margin-top:2px;">
+      <input class="wake-word-field" id="wake-word-input" type="text" placeholder="e.g. hey excell" maxlength="40">
+      <button class="form-btn primary" id="btn-save-wake-word" style="width:auto;padding:7px 12px;">ADD</button>
+    </div>
+  </div>
+
+  <!-- Strictness slider -->
+  <div style="display:flex;flex-direction:column;gap:5px;padding:8px 10px;background:var(--panel2);border-radius:var(--radius-sm);">
+    <div style="display:flex;justify-content:space-between;">
+      <span class="settings-row-label" style="font-family:var(--mono);font-size:.68rem;color:var(--muted);">DETECTION STRICTNESS</span>
+      <span id="strictness-label" style="font-family:var(--mono);font-size:.65rem;color:var(--accent);">MEDIUM</span>
+    </div>
+    <input class="settings-range" type="range" id="wake-strictness" min="1" max="3" step="1" value="2">
+    <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:.58rem;color:var(--muted);">
+      <span>LOOSE</span><span>MEDIUM</span><span>STRICT</span>
+    </div>
+  </div>
+</div>
     <div class="settings-row">
       <span class="settings-row-label">Enable Wake Word</span>
       <label class="mini-toggle">
