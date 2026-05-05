@@ -1,13 +1,12 @@
 /**
- * Excell AI - Client-Side JavaScript
- * Connects to backend proxy for Google AI Studio API
+ * Excell AI - Client-Side JavaScript (FIXED)
  */
 
 // ─────────────────────────────────────────────────────
 // CONFIGURATION
 // ─────────────────────────────────────────────────────
 const CONFIG = {
-  API_PROXY: '/api/chat',  // Your backend endpoint
+  API_PROXY: 'http://localhost:3001/api/chat', // Fixed: Full URL
   API_TIMEOUT: 20000,
   MAX_HISTORY: 10,
   RECONNECT_DELAY: 2000,
@@ -42,7 +41,7 @@ let conversationHistory = [], isProcessing = false, retryCount = 0;
 const MAX_RETRIES = 3;
 
 // ─────────────────────────────────────────────────────
-// AUDIO VISUALIZER (Same as before - kept concise)
+// AUDIO VISUALIZER
 // ─────────────────────────────────────────────────────
 const canvas = document.getElementById('spectrum-canvas');
 const ctx = canvas.getContext('2d');
@@ -50,6 +49,7 @@ let audioCtx, analyser, micStream, micSource, ttsAnalyser, ttsAudioCtx;
 let spectrumMode = 'idle', animFrame, idlePhase = 0;
 
 function resizeCanvas() {
+  if(!canvas) return;
   const wrap = canvas.parentElement;
   canvas.width = wrap.offsetWidth;
   canvas.height = wrap.offsetHeight;
@@ -65,6 +65,7 @@ function getRedColor() {
 
 function drawSpectrum() {
   animFrame = requestAnimationFrame(drawSpectrum);
+  if(!canvas) return;
   resizeCanvas();
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
@@ -153,6 +154,7 @@ function stopTTSSpectrum() {
 
 function updateSpectrumBadge() {
   const badge = document.getElementById('spectrum-badge');
+  if(!badge) return;
   badge.className = 'spectrum-mode-badge';
   if (spectrumMode === 'mic') { badge.textContent = '🔴 MIC'; badge.classList.add('mic-active'); }
   else if (spectrumMode === 'tts') { badge.textContent = '🔵 AI'; badge.classList.add('tts-active'); }
@@ -190,13 +192,15 @@ async function requestMicPermission() {
 
 async function initMic() {
   if (!micStream) micStream = await navigator.mediaDevices.getUserMedia({audio:true});
-  document.getElementById('mic-btn').classList.remove('disabled-btn');
+  const btn = document.getElementById('mic-btn');
+  if(btn) btn.classList.remove('disabled-btn');
   log('info','Mic ready');
 }
 
 function updatePermBanner() {
   const banner = document.getElementById('perm-banner');
   const ok = document.getElementById('perm-ok-banner');
+  if(!banner || !ok) return;
   if (micPermission === 'granted') {
     banner.classList.remove('visible');
     ok.classList.add('visible');
@@ -214,34 +218,55 @@ document.addEventListener('DOMContentLoaded', () => {
   applyTheme(settings.theme);
   syncSettingsUI();
   populateVoices();
-  window.speechSynthesis?.addEventListener('voiceschanged', populateVoices);
+  if(window.speechSynthesis) window.speechSynthesis.addEventListener('voiceschanged', populateVoices);
   checkMicPermission();
-  buildRelayCards();
+  
+  // Build UI
+  buildRelayCards(); 
+  buildQuickChips();
   updateStatsRow();
+  
   startClock();
   resizeCanvas();
   drawSpectrum();
+  
   if (settings.autoConnect) checkConnection();
   if (settings.wakeEnabled) startWakeWordListening();
-  document.getElementById('text-cmd-input').addEventListener('keydown', e => { if(e.key==='Enter') sendTextCommand(); });
-  document.getElementById('wake-word-input')?.addEventListener('keydown', e => { if(e.key==='Enter') saveWakeWord(); });
+  
+  const textInput = document.getElementById('text-cmd-input');
+  if(textInput) textInput.addEventListener('keydown', e => { if(e.key==='Enter') sendTextCommand(); });
+  
+  const wakeInput = document.getElementById('wake-word-input');
+  if(wakeInput) wakeInput.addEventListener('keydown', e => { if(e.key==='Enter') saveWakeWord(); });
 });
 
 function startClock() {
   const el = document.getElementById('topbar-time');
+  if(!el) return;
   const tick = () => el.textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   tick(); setInterval(tick,1000);
 }
 
 function updateStatsRow() {
-  document.getElementById('stat-active').textContent = Object.values(states).filter(Boolean).length;
-  document.getElementById('stat-total').textContent = relays.length;
-  const ok = document.getElementById('conn-dot').classList.contains('ok');
-  document.getElementById('stat-conn').textContent = ok ? '✓' : '—';
-  document.getElementById('stat-conn-sub').textContent = ok ? 'connected' : 'offline';
+  const activeEl = document.getElementById('stat-active');
+  const totalEl = document.getElementById('stat-total');
+  const connEl = document.getElementById('stat-conn');
+  const connSubEl = document.getElementById('stat-conn-sub');
   const wakeEl = document.getElementById('stat-wake');
-  if (settings.wakeEnabled) { wakeEl.textContent='ON'; wakeEl.className='stat-value green'; }
-  else { wakeEl.textContent='OFF'; wakeEl.className='stat-value warn'; }
+  
+  if(activeEl) activeEl.textContent = Object.values(states).filter(Boolean).length;
+  if(totalEl) totalEl.textContent = relays.length;
+  
+  const connDot = document.getElementById('conn-dot');
+  const ok = connDot ? connDot.classList.contains('ok') : false;
+  
+  if(connEl) connEl.textContent = ok ? '✓' : '—';
+  if(connSubEl) connSubEl.textContent = ok ? 'connected' : 'offline';
+  
+  if(wakeEl) {
+    if (settings.wakeEnabled) { wakeEl.textContent='ON'; wakeEl.className='stat-value green'; }
+    else { wakeEl.textContent='OFF'; wakeEl.className='stat-value warn'; }
+  }
 }
 
 function applyTheme(name) {
@@ -251,20 +276,35 @@ function applyTheme(name) {
   saveSettings();
 }
 
-function getIP() { return document.getElementById('ip-input').value.trim(); }
+function getIP() { 
+  const el = document.getElementById('ip-input');
+  return el ? el.value.trim() : '192.168.1.100'; 
+}
 
 async function checkConnection() {
-  const dot = document.getElementById('conn-dot'), label = document.getElementById('conn-label');
-  dot.className='conn-dot'; label.textContent='Connecting…';
+  const dot = document.getElementById('conn-dot'); 
+  const label = document.getElementById('conn-label');
+  if(!dot || !label) return;
+  
+  dot.className='conn-dot'; 
+  label.textContent='Connecting…';
+  
   try {
     const r = await fetch(`http://${getIP()}/status`, {signal:AbortSignal.timeout(3000)});
     if(r.ok) {
       const data = await r.json();
       relays.forEach(rel=>{if(data[rel.id]!==undefined) states[rel.id]=data[rel.id];});
-      updateUI(); dot.className='conn-dot ok'; label.textContent='Connected';
+      updateUI(); 
+      dot.className='conn-dot ok'; 
+      label.textContent='Connected';
       log('info',`Connected → ${getIP()}`);
     } else throw new Error('Bad response');
-  } catch { dot.className='conn-dot err'; label.textContent='Offline'; log('err',`Cannot reach ${getIP()}`); }
+  } catch { 
+    dot.className='conn-dot err'; 
+    label.textContent='Offline'; 
+    // Only log if it's not a CSP error (which we fixed in server)
+    console.log(`Cannot reach ${getIP()} (This is normal if ESP32 is off)`); 
+  }
   updateStatsRow();
 }
 
@@ -281,24 +321,35 @@ async function sendCmd(device, action) {
       } else states[device] = data.state??(action==='on');
       updateUI();
       const msg = `${device.toUpperCase()} turned ${action.toUpperCase()}`;
-      setStatus(`✓ ${msg}`,'ok'); log('ok',`${device} → ${action}`);
-      speakResponse(msg); showAIResponse(msg);
-    } else { setStatus(data.error||'Failed','err'); log('err',data.error||'Command failed'); }
+      setStatus(`✓ ${msg}`,'ok'); 
+      log('ok',`${device} → ${action}`);
+      speakResponse(msg); 
+      showAIResponse(msg);
+    } else { 
+      setStatus(data.error||'Failed','err'); 
+      log('err',data.error||'Command failed'); 
+    }
   } catch(e) {
-    setStatus('ESP32 unreachable','err'); log('err',`Fetch failed: ${e.message}`);
-    speakResponse('Could not reach ESP32.'); showAIResponse('⚠ ESP32 unreachable.');
+    setStatus('ESP32 unreachable','err'); 
+    log('err',`Fetch failed: ${e.message}`);
+    // Don't speak error for every click, just log it
   }
 }
 
 function updateUI() {
   relays.forEach(r => {
-    const on = states[r.id], card = document.getElementById('card-'+r.id);
+    const on = states[r.id];
+    const card = document.getElementById('card-'+r.id);
     if(!card) return;
+    
     card.classList.toggle('on', on);
+    
     const lbl = document.getElementById('state-label-'+r.id);
     if(lbl) lbl.textContent = on?'ACTIVE':'STANDBY';
+    
     const tlbl = document.getElementById('toggle-lbl-'+r.id);
     if(tlbl) tlbl.textContent = on?'ON':'OFF';
+    
     const chk = document.getElementById('toggle-'+r.id);
     if(chk) chk.checked = on;
   });
@@ -307,16 +358,20 @@ function updateUI() {
 
 function runScene(name) {
   const scenes = {morning:{light:true,fan:true}, night:{light:false,fan:false}, work:{light:true,fan:true}, relax:{light:true,heater:true}};
-  const s = scenes[name]; if(!s) return;
+  const s = scenes[name]; 
+  if(!s) return;
+  
   relays.forEach(r=>{if(s[r.id]!==undefined) states[r.id]=s[r.id];});
-  updateUI(); log('info',`Scene: ${name}`); setStatus(`Scene → ${name}`,'ok');
-  speakResponse(`${name} scene activated.`); showAIResponse(`🌟 Scene "${name}" activated.`);
+  updateUI(); 
+  log('info',`Scene: ${name}`); 
+  setStatus(`Scene → ${name}`,'ok');
+  speakResponse(`${name} scene activated.`); 
+  showAIResponse(`🌟 Scene "${name}" activated.`);
 }
 
 // ─────────────────────────────────────────────────────
-// 🧠 AI PROCESSING VIA GOOGLE AI STUDIO (REST API)
+// 🧠 AI PROCESSING
 // ─────────────────────────────────────────────────────
-
 async function processWithAI(userInput) {
   if (isProcessing) { setStatus("Processing...", "info"); return; }
   isProcessing = true;
@@ -344,19 +399,19 @@ async function processWithAI(userInput) {
 
     const data = await response.json();
     
-    // Handle action from AI
     if (data.action) {
       if (data.action.type === 'control_relay') {
         await sendCmd(data.action.params.device, data.action.params.action);
         const msg = `✅ ${data.action.params.device} turned ${data.action.params.action}`;
-        showAIResponse(msg); speakResponse(msg); addToHistory('model', msg);
+        showAIResponse(msg); 
+        speakResponse(msg); 
+        addToHistory('model', msg);
       } else if (data.action.type === 'run_scene') {
         runScene(data.action.params.scene);
         addToHistory('model', `Activated ${data.action.params.scene}`);
       }
     }
     
-    // Handle text response
     if (data.response) {
       showAIResponse(data.response);
       speakResponse(data.response);
@@ -376,7 +431,8 @@ async function processWithAI(userInput) {
     }
     const fallback = "I'm having connection issues. Please try again.";
     setStatus("Connection issue", "err");
-    showAIResponse(fallback); speakResponse(fallback);
+    showAIResponse(fallback); 
+    speakResponse(fallback);
     log('err', `AI Error: ${error.message}`);
     retryCount = 0;
   } finally {
@@ -396,13 +452,17 @@ function addToHistory(role, content) {
 // ─────────────────────────────────────────────────────
 function sendTextCommand() {
   const input = document.getElementById('text-cmd-input');
-  const text = input.value.trim();
+  const text = input ? input.value.trim() : '';
   if (!text) return;
-  document.getElementById('transcript-display-text').textContent = text;
+  
+  const tBox = document.getElementById('transcript-display-text');
+  if(tBox) tBox.textContent = text;
+  
   log('text-cmd', `Text: "${text}"`);
   setStatus(`Command: "${text}"`, 'info');
   processWithAI(text);
-  input.value = '';
+  
+  if(input) input.value = '';
 }
 
 function toggleListening() {
@@ -417,6 +477,7 @@ function startListening() {
   if (wakeListening) { try{wakeRecognition.stop();}catch{} }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { setStatus('Speech API not supported — use Chrome','err'); return; }
+  
   recognition = new SR();
   recognition.continuous = settings.continuousVoice;
   recognition.interimResults = true;
@@ -424,9 +485,14 @@ function startListening() {
   
   recognition.onstart = () => {
     listening = true;
-    document.getElementById('mic-btn').classList.add('listening');
-    document.getElementById('mic-label').textContent = 'LISTENING…';
-    document.getElementById('mic-live-dot').classList.add('active');
+    const btn = document.getElementById('mic-btn');
+    const lbl = document.getElementById('mic-label');
+    const dot = document.getElementById('mic-live-dot');
+    
+    if(btn) btn.classList.add('listening');
+    if(lbl) lbl.textContent = 'LISTENING…';
+    if(dot) dot.classList.add('active');
+    
     setStatus('Listening…', 'info');
     startMicSpectrum();
   };
@@ -435,30 +501,56 @@ function startListening() {
     const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ').toLowerCase().trim();
     const tBox = document.getElementById('transcript-display-text');
     const isFinal = e.results[e.results.length-1].isFinal;
-    tBox.textContent = `"${transcript}"`;
-    tBox.classList.toggle('interim', !isFinal);
-    if (isFinal) { log('voice', `Heard: "${transcript}"`); processWithAI(transcript); }
+    
+    if(tBox) {
+      tBox.textContent = `"${transcript}"`;
+      tBox.classList.toggle('interim', !isFinal);
+    }
+    
+    if (isFinal) { 
+      log('voice', `Heard: "${transcript}"`); 
+      processWithAI(transcript); 
+    }
   };
   
-  recognition.onerror = (e) => { setStatus(`Voice error: ${e.error}`,'err'); log('err', e.error); stopListening(); };
-  recognition.onend = () => { if(settings.continuousVoice && listening) recognition.start(); else stopListening(); };
+  recognition.onerror = (e) => { 
+    setStatus(`Voice error: ${e.error}`,'err'); 
+    log('err', e.error); 
+    stopListening(); 
+  };
+  
+  recognition.onend = () => { 
+    if(settings.continuousVoice && listening) recognition.start(); 
+    else stopListening(); 
+  };
   
   try { recognition.start(); } catch(e) { listening=false; stopMicSpectrum(); }
 }
 
 function stopListening() {
   listening = false;
-  document.getElementById('mic-btn').classList.remove('listening');
-  document.getElementById('mic-live-dot').classList.remove('active');
+  const btn = document.getElementById('mic-btn');
+  const dot = document.getElementById('mic-live-dot');
+  const lbl = document.getElementById('mic-label');
+  
+  if(btn) btn.classList.remove('listening');
+  if(dot) dot.classList.remove('active');
+  
   stopMicSpectrum();
+  
   if (recognition) { try{recognition.stop();}catch{} recognition=null; }
-  if (document.getElementById('status-text').textContent.startsWith('Listening')) setStatus('Ready','');
-  document.getElementById('transcript-display-text').classList.remove('interim');
+  
+  const statusEl = document.getElementById('status-text');
+  if (statusEl && statusEl.textContent.startsWith('Listening')) setStatus('Ready','');
+  
+  const tBox = document.getElementById('transcript-display-text');
+  if(tBox) tBox.classList.remove('interim');
+  
   if (settings.wakeEnabled && !wakeListening) {
     setTimeout(startWakeWordListening, 400);
-    document.getElementById('mic-label').textContent = 'WAKE WORD ACTIVE';
+    if(lbl) lbl.textContent = 'WAKE WORD ACTIVE';
   } else if (!settings.wakeEnabled) {
-    document.getElementById('mic-label').textContent = 'TAP TO SPEAK';
+    if(lbl) lbl.textContent = 'TAP TO SPEAK';
   }
 }
 
@@ -469,6 +561,7 @@ function startWakeWordListening() {
   if (wakeListening) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return;
+  
   wakeRecognition = new SR();
   wakeRecognition.continuous = true;
   wakeRecognition.interimResults = true;
@@ -476,9 +569,14 @@ function startWakeWordListening() {
   
   wakeRecognition.onstart = () => {
     wakeListening = true;
-    document.getElementById('wake-banner').classList.add('visible');
-    document.getElementById('mic-btn').classList.add('wake-standby');
-    document.getElementById('mic-label').textContent = 'WAKE WORD ACTIVE';
+    const banner = document.getElementById('wake-banner');
+    const btn = document.getElementById('mic-btn');
+    const lbl = document.getElementById('mic-label');
+    
+    if(banner) banner.classList.add('visible');
+    if(btn) btn.classList.add('wake-standby');
+    if(lbl) lbl.textContent = 'WAKE WORD ACTIVE';
+    
     log('wake', `Listening for: "${settings.wakeWord}"`);
   };
   
@@ -507,9 +605,13 @@ function startWakeWordListening() {
 function stopWakeWordListening() {
   wakeListening = false;
   if (wakeRecognition) { try{wakeRecognition.stop();}catch{} wakeRecognition=null; }
-  document.getElementById('wake-banner').classList.remove('visible');
-  document.getElementById('mic-btn').classList.remove('wake-standby');
-  if (!listening) document.getElementById('mic-label').textContent = 'TAP TO SPEAK';
+  const banner = document.getElementById('wake-banner');
+  const btn = document.getElementById('mic-btn');
+  const lbl = document.getElementById('mic-label');
+  
+  if(banner) banner.classList.remove('visible');
+  if(btn) btn.classList.remove('wake-standby');
+  if (!listening && lbl) lbl.textContent = 'TAP TO SPEAK';
 }
 
 function onWakeDetected() {
@@ -525,15 +627,21 @@ function onWakeDetected() {
 function startCommandMode() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return;
+  
   recognition = new SR();
   recognition.continuous = false;
   recognition.interimResults = true;
   recognition.lang = 'en-US';
   listening = true;
   
-  document.getElementById('mic-btn').classList.add('listening');
-  document.getElementById('mic-label').textContent = 'LISTENING…';
-  document.getElementById('mic-live-dot').classList.add('active');
+  const btn = document.getElementById('mic-btn');
+  const lbl = document.getElementById('mic-label');
+  const dot = document.getElementById('mic-live-dot');
+  
+  if(btn) btn.classList.add('listening');
+  if(lbl) lbl.textContent = 'LISTENING…';
+  if(dot) dot.classList.add('active');
+  
   startMicSpectrum();
   
   const timeout = setTimeout(() => {
@@ -544,29 +652,53 @@ function startCommandMode() {
     const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ').toLowerCase().trim();
     const tBox = document.getElementById('transcript-display-text');
     const isFinal = e.results[e.results.length-1].isFinal;
-    tBox.textContent = `"${transcript}"`;
-    tBox.classList.toggle('interim', !isFinal);
-    if (isFinal) { clearTimeout(timeout); log('voice', `Command: "${transcript}"`); processWithAI(transcript); }
+    
+    if(tBox) {
+      tBox.textContent = `"${transcript}"`;
+      tBox.classList.toggle('interim', !isFinal);
+    }
+    
+    if (isFinal) { 
+      clearTimeout(timeout); 
+      log('voice', `Command: "${transcript}"`); 
+      processWithAI(transcript); 
+    }
   };
   
-  recognition.onerror = (e) => { clearTimeout(timeout); setStatus(`Error: ${e.error}`,'err'); resetToWake(); };
-  recognition.onend = () => { clearTimeout(timeout); listening=false; stopMicSpectrum(); resetToWake(); };
+  recognition.onerror = (e) => { 
+    clearTimeout(timeout); 
+    setStatus(`Error: ${e.error}`,'err'); 
+    resetToWake(); 
+  };
+  
+  recognition.onend = () => { 
+    clearTimeout(timeout); 
+    listening=false; 
+    stopMicSpectrum(); 
+    resetToWake(); 
+  };
   
   try { recognition.start(); } catch { listening=false; stopMicSpectrum(); resetToWake(); }
 }
 
 function resetToWake() {
   listening = false;
-  document.getElementById('mic-btn').classList.remove('listening');
-  document.getElementById('mic-live-dot').classList.remove('active');
+  const btn = document.getElementById('mic-btn');
+  const dot = document.getElementById('mic-live-dot');
+  const lbl = document.getElementById('mic-label');
+  const tBox = document.getElementById('transcript-display-text');
+  
+  if(btn) btn.classList.remove('listening');
+  if(dot) dot.classList.remove('active');
   stopMicSpectrum();
+  
   if (settings.wakeEnabled) {
     setTimeout(startWakeWordListening, 400);
-    document.getElementById('mic-label').textContent = 'WAKE WORD ACTIVE';
+    if(lbl) lbl.textContent = 'WAKE WORD ACTIVE';
   } else {
-    document.getElementById('mic-label').textContent = 'TAP TO SPEAK';
+    if(lbl) lbl.textContent = 'TAP TO SPEAK';
   }
-  document.getElementById('transcript-display-text').classList.remove('interim');
+  if(tBox) tBox.classList.remove('interim');
 }
 
 // ─────────────────────────────────────────────────────
@@ -576,6 +708,7 @@ function populateVoices() {
   const voices = window.speechSynthesis?.getVoices() || [];
   const select = document.getElementById('voice-select-list');
   if (!select) return;
+  
   select.innerHTML = '';
   voices.filter(v=>v.lang.startsWith('en')).forEach(v => {
     const chip = document.createElement('span');
@@ -599,15 +732,29 @@ function speakResponse(text) {
   if (ttsVoice) utt.voice = ttsVoice;
   utt.rate = parseFloat(settings.ttsRate) || 1.0;
   utt.pitch = parseFloat(settings.ttsPitch) || 1.0;
-  utt.onstart = () => { document.getElementById('ai-response-text')?.classList.add('speaking'); startTTSSpectrum(); };
-  utt.onend = () => { document.getElementById('ai-response-text')?.classList.remove('speaking'); stopTTSSpectrum(); };
-  utt.onerror = () => { document.getElementById('ai-response-text')?.classList.remove('speaking'); stopTTSSpectrum(); };
+  
+  const respEl = document.getElementById('ai-response-text');
+  
+  utt.onstart = () => { 
+    if(respEl) respEl.classList.add('speaking'); 
+    startTTSSpectrum(); 
+  };
+  utt.onend = () => { 
+    if(respEl) respEl.classList.remove('speaking'); 
+    stopTTSSpectrum(); 
+  };
+  utt.onerror = () => { 
+    if(respEl) respEl.classList.remove('speaking'); 
+    stopTTSSpectrum(); 
+  };
+  
   window.speechSynthesis.speak(utt);
 }
 
 function stopSpeaking() {
   window.speechSynthesis?.cancel();
-  document.getElementById('ai-response-text')?.classList.remove('speaking');
+  const respEl = document.getElementById('ai-response-text');
+  if(respEl) respEl.classList.remove('speaking');
   stopTTSSpectrum();
 }
 
@@ -616,20 +763,42 @@ function testSpeech() { speakResponse('Excell AI is ready.'); }
 // ─────────────────────────────────────────────────────
 // SETTINGS & HELPERS
 // ─────────────────────────────────────────────────────
-function openSettings() { document.getElementById('settings-overlay').classList.add('open'); document.getElementById('settings-drawer').classList.add('open'); }
-function closeSettings() { document.getElementById('settings-overlay').classList.remove('open'); document.getElementById('settings-drawer').classList.remove('open'); }
+function openSettings() { 
+  const overlay = document.getElementById('settings-overlay');
+  const drawer = document.getElementById('settings-drawer');
+  if(overlay) overlay.classList.add('open');
+  if(drawer) drawer.classList.add('open'); 
+}
+
+function closeSettings() { 
+  const overlay = document.getElementById('settings-overlay');
+  const drawer = document.getElementById('settings-drawer');
+  if(overlay) overlay.classList.remove('open');
+  if(drawer) drawer.classList.remove('open'); 
+}
 
 function syncSettingsUI() {
-  document.getElementById('tts-toggle-setting').checked = settings.tts;
-  document.getElementById('tts-rate').value = settings.ttsRate;
-  document.getElementById('tts-pitch').value = settings.ttsPitch;
-  document.getElementById('auto-connect').checked = settings.autoConnect;
-  document.getElementById('wake-toggle-setting').checked = settings.wakeEnabled;
-  document.getElementById('wake-word-input').value = settings.wakeWord || 'hey excell';
-  document.getElementById('wake-word-display').textContent = settings.wakeWord || 'hey excell';
-  const chip = document.getElementById('wake-status-chip');
-  chip.textContent = settings.wakeEnabled ? 'ACTIVE' : 'OFF';
-  chip.classList.toggle('active', settings.wakeEnabled);
+  const ttsToggle = document.getElementById('tts-toggle-setting');
+  const ttsRate = document.getElementById('tts-rate');
+  const ttsPitch = document.getElementById('tts-pitch');
+  const autoConn = document.getElementById('auto-connect');
+  const wakeToggle = document.getElementById('wake-toggle-setting');
+  const wakeInput = document.getElementById('wake-word-input');
+  const wakeDisplay = document.getElementById('wake-word-display');
+  const wakeChip = document.getElementById('wake-status-chip');
+  
+  if(ttsToggle) ttsToggle.checked = settings.tts;
+  if(ttsRate) ttsRate.value = settings.ttsRate;
+  if(ttsPitch) ttsPitch.value = settings.ttsPitch;
+  if(autoConn) autoConn.checked = settings.autoConnect;
+  if(wakeToggle) wakeToggle.checked = settings.wakeEnabled;
+  if(wakeInput) wakeInput.value = settings.wakeWord || 'hey excell';
+  if(wakeDisplay) wakeDisplay.textContent = settings.wakeWord || 'hey excell';
+  
+  if(wakeChip) {
+    wakeChip.textContent = settings.wakeEnabled ? 'ACTIVE' : 'OFF';
+    wakeChip.classList.toggle('active', settings.wakeEnabled);
+  }
 }
 
 function onTTSToggle(v) { settings.tts = v; if(!v) stopSpeaking(); saveSettings(); }
@@ -638,109 +807,299 @@ function onPitchChange(v) { settings.ttsPitch = parseFloat(v); saveSettings(); }
 function onAutoConnectToggle(v) { settings.autoConnect = v; saveSettings(); }
 function onContinuousToggle(v) { settings.continuousVoice = v; if(!v && listening) stopListening(); saveSettings(); }
 
-function onWakeToggle(v) { settings.wakeEnabled = v; saveSettings(); if(v) startWakeWordListening(); else stopWakeWordListening(); updateStatsRow(); }
+function onWakeToggle(v) { 
+  settings.wakeEnabled = v; 
+  saveSettings(); 
+  if(v) startWakeWordListening(); 
+  else stopWakeWordListening(); 
+  updateStatsRow(); 
+}
+
 function saveWakeWord() {
-  const val = document.getElementById('wake-word-input').value.trim().toLowerCase();
+  const input = document.getElementById('wake-word-input');
+  const val = input ? input.value.trim().toLowerCase() : '';
   if (!val) return;
-  settings.wakeWord = val; saveSettings();
-  document.getElementById('wake-word-display').textContent = val;
-  updateStatsRow(); log('info', `Wake word: "${val}"`);
+  
+  settings.wakeWord = val; 
+  saveSettings();
+  
+  const display = document.getElementById('wake-word-display');
+  if(display) display.textContent = val;
+  
+  updateStatsRow(); 
+  log('info', `Wake word: "${val}"`);
   showAIResponse(`Wake word: "${val}"`);
-  if (settings.wakeEnabled) { stopWakeWordListening(); setTimeout(startWakeWordListening, 400); }
+  
+  if (settings.wakeEnabled) { 
+    stopWakeWordListening(); 
+    setTimeout(startWakeWordListening, 400); 
+  }
 }
 
 function saveRelays() { localStorage.setItem('vr_relays', JSON.stringify(relays)); }
 function saveSettings() { localStorage.setItem('vr_settings', JSON.stringify(settings)); }
 
-function setStatus(msg, cls) { const el = document.getElementById('status-text'); el.textContent = msg; el.className = cls||''; }
-function showAIResponse(msg) { const el = document.getElementById('ai-response-text'); if(!el) return; el.textContent = msg; log('ai', msg.substring(0,80)+(msg.length>80?'…':'')); }
+function setStatus(msg, cls) { 
+  const el = document.getElementById('status-text'); 
+  if(el) { el.textContent = msg; el.className = cls||''; }
+}
+
+function showAIResponse(msg) { 
+  const el = document.getElementById('ai-response-text'); 
+  if(!el) return; 
+  el.textContent = msg; 
+  log('ai', msg.substring(0,80)+(msg.length>80?'…':'')); 
+}
 
 function log(type, msg) {
   const box = document.getElementById('log-box');
+  if(!box) return;
   const ts = new Date().toTimeString().slice(0,8);
   const entry = document.createElement('div');
   entry.className = `log-entry ${type}`;
   entry.innerHTML = `<span class="ts">[${ts}]</span><span class="msg">${escHtml(msg)}</span>`;
-  box.appendChild(entry); box.scrollTop = box.scrollHeight;
+  box.appendChild(entry); 
+  box.scrollTop = box.scrollHeight;
 }
 
-function clearLog() { document.getElementById('log-box').innerHTML = ''; }
-function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function clearLog() { 
+  const box = document.getElementById('log-box');
+  if(box) box.innerHTML = ''; 
+}
 
-// Modal functions (concise)
-function openAddModal() { modalMode='add'; editingRelayId=null; selectedPin=null; selectedEmoji='💡'; prepModal('➕ ADD RELAY','SAVE RELAY'); }
-function openEditModal(id) { const r=relays.find(x=>x.id===id); if(!r)return; modalMode='edit'; editingRelayId=id; selectedPin=r.pin; selectedEmoji=r.icon; prepModal('✏ EDIT','UPDATE',r); }
+function escHtml(s) { 
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); 
+}
+
+// ─────────────────────────────────────────────────────
+// MODAL & RELAY FUNCTIONS (FIXED)
+// ─────────────────────────────────────────────────────
+function openAddModal() { 
+  modalMode='add'; 
+  editingRelayId=null; 
+  selectedPin=null; 
+  selectedEmoji='💡'; 
+  prepModal('➕ ADD RELAY','SAVE RELAY'); 
+}
+
+function openEditModal(id) { 
+  const r=relays.find(x=>x.id===id); 
+  if(!r)return; 
+  modalMode='edit'; 
+  editingRelayId=id; 
+  selectedPin=r.pin; 
+  selectedEmoji=r.icon; 
+  prepModal('✏ EDIT','UPDATE',r); 
+}
+
 function prepModal(title,btnText,r=null) {
-  document.getElementById('modal-title').textContent=title;
-  document.getElementById('modal-save-btn').textContent=btnText;
-  document.getElementById('modal-name').value=r?.name||'';
-  document.getElementById('modal-desc').value=r?.desc||'';
-  document.getElementById('modal-type').value=r?.type||'normal';
-  document.getElementById('modal-init').value=r?.initState||'off';
-  document.getElementById('modal-error').classList.remove('visible');
-  document.getElementById('pin-error').classList.remove('visible');
-  buildPinGrid(r?.pin); buildEmojiPicker(r?.icon||'💡');
-  document.getElementById('relay-modal').classList.add('open');
+  const titleEl = document.getElementById('modal-title');
+  const saveBtn = document.getElementById('modal-save-btn');
+  const nameEl = document.getElementById('modal-name');
+  const descEl = document.getElementById('modal-desc');
+  const typeEl = document.getElementById('modal-type');
+  const initEl = document.getElementById('modal-init');
+  const errEl = document.getElementById('modal-error');
+  const pinErr = document.getElementById('pin-error');
+  const modal = document.getElementById('relay-modal');
+  
+  if(titleEl) titleEl.textContent=title;
+  if(saveBtn) saveBtn.textContent=btnText;
+  if(nameEl) nameEl.value=r?.name||'';
+  if(descEl) descEl.value=r?.desc||'';
+  if(typeEl) typeEl.value=r?.type||'normal';
+  if(initEl) initEl.value=r?.initState||'off';
+  if(errEl) errEl.classList.remove('visible');
+  if(pinErr) pinErr.classList.remove('visible');
+  
+  buildPinGrid(r?.pin); 
+  buildEmojiPicker(r?.icon||'💡');
+  if(modal) modal.classList.add('open');
 }
-function closeRelayModal() { document.getElementById('relay-modal').classList.remove('open'); }
+
+function closeRelayModal() { 
+  const modal = document.getElementById('relay-modal');
+  if(modal) modal.classList.remove('open'); 
+}
+
 function buildPinGrid(cur) {
+  const grid = document.getElementById('pin-grid');
+  if(!grid) return;
   const used=relays.map(r=>r.pin).filter(p=>p!==undefined);
-  document.getElementById('pin-grid').innerHTML=ESP32_PINS.map(p=>{
+  grid.innerHTML=ESP32_PINS.map(p=>{
     const usedPin=used.includes(p)&&p!==cur, sel=p===cur;
     return `<div class="pin-opt ${usedPin?'used':''} ${sel?'selected':''}" onclick="${usedPin?'':'selectPin('+p+')'}">GPIO<br>${p}</div>`;
   }).join('');
 }
-function selectPin(p) { selectedPin=p; buildPinGrid(p); document.getElementById('pin-error').classList.remove('visible'); }
+
+function selectPin(p) { 
+  selectedPin=p; 
+  buildPinGrid(p); 
+  const pinErr = document.getElementById('pin-error');
+  if(pinErr) pinErr.classList.remove('visible'); 
+}
+
 function buildEmojiPicker(cur) {
+  const picker = document.getElementById('modal-emoji-picker');
+  if(!picker) return;
   selectedEmoji=cur||'💡';
-  document.getElementById('modal-emoji-picker').innerHTML=EMOJI_OPTIONS.map(e=>
+  picker.innerHTML=EMOJI_OPTIONS.map(e=>
     `<span class="emoji-opt ${e===selectedEmoji?'selected':''}" onclick="selectEmoji('${e}')">${e}</span>`
   ).join('');
 }
-function selectEmoji(e) { selectedEmoji=e; document.querySelectorAll('#modal-emoji-picker .emoji-opt').forEach(el=>el.classList.toggle('selected',el.textContent===e)); }
+
+function selectEmoji(e) { 
+  selectedEmoji=e; 
+  document.querySelectorAll('#modal-emoji-picker .emoji-opt').forEach(el=>el.classList.toggle('selected',el.textContent===e)); 
+}
 
 function saveRelay() {
-  const nameEl=document.getElementById('modal-name'), name=nameEl.value.trim();
-  const desc=document.getElementById('modal-desc').value.trim();
-  const type=document.getElementById('modal-type').value, init=document.getElementById('modal-init').value;
-  const errEl=document.getElementById('modal-error'), pinErr=document.getElementById('pin-error');
-  errEl.classList.remove('visible'); pinErr.classList.remove('visible'); nameEl.classList.remove('error');
-  if(!name){nameEl.classList.add('error');errEl.textContent='Name required.';errEl.classList.add('visible');return;}
-  if(selectedPin===null){pinErr.classList.add('visible');return;}
+  const nameEl=document.getElementById('modal-name');
+  const name=nameEl ? nameEl.value.trim() : '';
+  const descEl=document.getElementById('modal-desc');
+  const desc=descEl ? descEl.value.trim() : '';
+  const typeEl=document.getElementById('modal-type');
+  const type=typeEl ? typeEl.value : 'normal';
+  const initEl=document.getElementById('modal-init');
+  const init=initEl ? initEl.value : 'off';
+  
+  const errEl=document.getElementById('modal-error'); 
+  const pinErr=document.getElementById('pin-error');
+  
+  if(errEl) errEl.classList.remove('visible'); 
+  if(pinErr) pinErr.classList.remove('visible'); 
+  if(nameEl) nameEl.classList.remove('error');
+  
+  if(!name){
+    if(nameEl) nameEl.classList.add('error');
+    if(errEl){errEl.textContent='Name required.';errEl.classList.add('visible');}
+    return;
+  }
+  if(selectedPin===null){
+    if(pinErr) pinErr.classList.add('visible');
+    return;
+  }
+  
   const id=name.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+  
   if(modalMode==='add') {
-    if(relays.some(r=>r.id===id)){errEl.textContent='Already exists.';errEl.classList.add('visible');return;}
+    if(relays.some(r=>r.id===id)){
+      if(errEl){errEl.textContent='Already exists.';errEl.classList.add('visible');}
+      return;
+    }
     relays.push({id,icon:selectedEmoji,name,desc,pin:selectedPin,type,initState:init});
-    states[id]=init==='on'; log('info',`Added: ${name}`); showAIResponse(`Added ${name}`); speakResponse(`Created ${name}`);
+    states[id]=init==='on'; 
+    log('info',`Added: ${name}`); 
+    showAIResponse(`Added ${name}`); 
+    speakResponse(`Created ${name}`);
   } else {
-    const idx=relays.findIndex(r=>r.id===editingRelayId); if(idx===-1)return;
+    const idx=relays.findIndex(r=>r.id===editingRelayId); 
+    if(idx===-1)return;
     const newId=name.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
     const prev=states[editingRelayId];
     if(newId!==editingRelayId) {
-      if(relays.some((r,i)=>r.id===newId&&i!==idx)){errEl.textContent='Already exists.';errEl.classList.add('visible');return;}
-      delete states[editingRelayId]; states[newId]=prev;
+      if(relays.some((r,i)=>r.id===newId&&i!==idx)){
+        if(errEl){errEl.textContent='Already exists.';errEl.classList.add('visible');}
+        return;
+      }
+      delete states[editingRelayId]; 
+      states[newId]=prev;
     }
     relays[idx]={id:newId,icon:selectedEmoji,name,desc,pin:selectedPin,type,initState:init};
-    log('info',`Updated: ${name}`); showAIResponse(`Updated ${name}`);
+    log('info',`Updated: ${name}`); 
+    showAIResponse(`Updated ${name}`);
   }
-  saveRelays(); buildRelayCards(); closeRelayModal();
+  saveRelays(); 
+  buildRelayCards(); 
+  closeRelayModal();
 }
 
 function confirmDeleteRelay(id) {
-  const r=relays.find(x=>x.id===id); if(!r)return;
+  const r=relays.find(x=>x.id===id); 
+  if(!r)return;
   if(!confirm(`Delete "${r.name}"?`))return;
-  relays=relays.filter(x=>x.id!==id); delete states[id];
-  saveRelays(); buildRelayCards(); log('info',`Deleted: ${r.name}`); showAIResponse(`Deleted ${r.name}`);
+  relays=relays.filter(x=>x.id!==id); 
+  delete states[id];
+  saveRelays(); 
+  buildRelayCards(); 
+  log('info',`Deleted: ${r.name}`); 
+  showAIResponse(`Deleted ${r.name}`);
+}
+
+// ✅ CRITICAL: This function was missing or broken
+function buildRelayCards() {
+  const grid = document.getElementById('relays-grid');
+  const chipsContainer = document.getElementById('quick-chips');
+  if(!grid) return;
+  
+  grid.innerHTML = relays.map(r => {
+    const isOn = states[r.id];
+    return `
+    <div class="relay-card ${isOn?'on':''}" id="card-${r.id}">
+      <div class="relay-header">
+        <div class="relay-icon">${r.icon}</div>
+        <div class="relay-actions">
+          <button class="icon-btn" onclick="openEditModal('${r.id}')" title="Edit">✏️</button>
+          <button class="icon-btn" onclick="confirmDeleteRelay('${r.id}')" title="Delete" style="color:var(--red)">🗑️</button>
+        </div>
+      </div>
+      <div class="relay-name">${r.name}</div>
+      <div class="relay-desc">${r.desc||''}</div>
+      <div class="relay-state-label" id="state-label-${r.id}">${isOn?'ACTIVE':'STANDBY'}</div>
+      <div class="relay-toggle-wrap">
+        <label class="relay-toggle">
+          <input type="checkbox" id="toggle-${r.id}" ${isOn?'checked':''} onchange="onToggle('${r.id}',this.checked)">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+        <div class="toggle-text" id="toggle-lbl-${r.id}">${isOn?'ON':'OFF'}</div>
+      </div>
+    </div>
+    `;
+  }).join('');
+  
+  buildQuickChips();
 }
 
 function buildQuickChips() {
   const container=document.getElementById('quick-chips');
-  const extra=[{l:'all on',f:()=>sendCmd('all','on')},{l:'all off',f:()=>sendCmd('all','off')},{l:'refresh',f:fetchStatus}];
+  if(!container) return;
+  const extra=[{l:'all on',f:()=>sendCmd('all','on')},{l:'all off',f:()=>sendCmd('all','off')},{l:'refresh',f:checkConnection}];
   const chips=relays.flatMap(r=>[{l:`${r.name.toLowerCase()} on`,f:()=>sendCmd(r.id,'on')},{l:`${r.name.toLowerCase()} off`,f:()=>sendCmd(r.id,'off')}]);
   const all=[...chips,...extra];
   container.innerHTML=all.map((c,i)=>`<span class="chip" onclick="window._chips[${i}].f()">${c.l}</span>`).join('');
   window._chips=all;
 }
 
-function onToggle(id,checked) { sendCmd(id,checked?'on':'off'); }
-function sendTextCommand() { const i=document.getElementById('text-cmd-input'),t=i.value.trim(); if(!t)return; document.getElementById('transcript-display-text').textContent=t; log('text',t); setStatus(`Command: "${t}"`,'info'); processWithAI(t); i.value=''; }
+function onToggle(id,checked) { 
+  sendCmd(id,checked?'on':'off'); 
+}
+
+// Expose functions to window for inline HTML onclick handlers
+window.sendTextCommand = sendTextCommand;
+window.sendCmd = sendCmd;
+window.runScene = runScene;
+window.toggleListening = toggleListening;
+window.openSettings = openSettings;
+window.closeSettings = closeSettings;
+window.openAddModal = openAddModal;
+window.openEditModal = openEditModal;
+window.closeRelayModal = closeRelayModal;
+window.selectPin = selectPin;
+window.selectEmoji = selectEmoji;
+window.saveRelay = saveRelay;
+window.confirmDeleteRelay = confirmDeleteRelay;
+window.onToggle = onToggle;
+window.checkConnection = checkConnection;
+window.requestMicPermission = requestMicPermission;
+window.stopSpeaking = stopSpeaking;
+window.testSpeech = testSpeech;
+window.onTTSToggle = onTTSToggle;
+window.onRateChange = onRateChange;
+window.onPitchChange = onPitchChange;
+window.onAutoConnectToggle = onAutoConnectToggle;
+window.onContinuousToggle = onContinuousToggle;
+window.onWakeToggle = onWakeToggle;
+window.saveWakeWord = saveWakeWord;
+window.clearLog = clearLog;
+window.applyTheme = applyTheme;

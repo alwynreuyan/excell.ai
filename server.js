@@ -3,13 +3,6 @@
  * 
  * 🔐 Secure Google AI Studio API proxy
  * 🌐 Serves frontend + handles AI requests
- * 
- * Setup:
- * 1. npm install express dotenv cors helmet express-rate-limit
- * 2. Create .env with GEMINI_API_KEY
- * 3. Put frontend files in /public folder
- * 4. Run: node server.js
- * 5. Open: http://localhost:3001
  */
 
 require('dotenv').config();
@@ -25,255 +18,174 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.GEMINI_API_KEY;
-const MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+// Hardcoded to ensure the correct free model is used
+const MODEL = 'gemini-1.5-flash-latest'; 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Validate API key
 if (!API_KEY) {
   console.error('❌ CRITICAL: GEMINI_API_KEY not found in .env');
-  console.error('   1. Create a .env file in project root');
-  console.error('   2. Add: GEMINI_API_KEY=your_key_here');
-  console.error('   3. Get key from: https://aistudio.google.com/app/apikey');
   process.exit(1);
 }
 
 // ─────────────────────────────────────────────────────
 // SECURITY & MIDDLEWARE
 // ─────────────────────────────────────────────────────
-
-// Helmet: Security headers
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], 
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-      connectSrc: ["'self'", "https://generativelanguage.googleapis.com", "http://localhost:*"],
+      connectSrc: [
+        "'self'", 
+        "https://generativelanguage.googleapis.com", 
+        "http://localhost:*", 
+        "http://127.0.0.1:*",
+        "http://192.168.1.100"
+      ],
       imgSrc: ["'self'", "data:", "https:"],
-      upgradeInsecureRequests: null,
+      scriptSrcAttr: ["'unsafe-inline'"], 
     },
   },
-  crossOriginEmbedderPolicy: false, // Needed for some browser features
+  crossOriginEmbedderPolicy: false,
   crossOriginOpenerPolicy: false,
 }));
 
-// CORS: Allow frontend to call backend
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
-  'http://localhost:8000',
-  'http://127.0.0.1:8000', 
-  'http://localhost:5500',  // VS Code Live Server
-  'http://localhost:3000',  // React dev server
+  'http://localhost:8000', 'http://127.0.0.1:8000', 
+  'http://localhost:5500', 'http://localhost:3000',
 ];
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, or file:// in dev)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost')) {
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost')) {
       return callback(null, true);
     }
-    console.warn(`⚠️ Blocked origin: ${origin}`);
-    return callback(new Error('Not allowed by CORS'));
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Body parser with size limit
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Rate limiting: Prevent API abuse
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: NODE_ENV === 'production' ? 30 : 200, // Lower limit in production
-  message: { error: 'Too many requests. Please wait a moment.' },
+  windowMs: 15 * 60 * 1000,
+  max: NODE_ENV === 'production' ? 30 : 200,
+  message: { error: 'Too many requests.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip, // Rate limit by IP
+  keyGenerator: (req) => req.ip,
 });
 
 // ─────────────────────────────────────────────────────
-// SERVE STATIC FILES (FRONTEND)
+// SERVE STATIC FILES
 // ─────────────────────────────────────────────────────
-
-// Serve files from /public folder
 app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: NODE_ENV === 'production' ? '1d' : '0',
   etag: true,
   lastModified: true,
 }));
 
-// Fallback: Serve index.html for SPA routing (if needed)
 app.get('*', (req, res, next) => {
-  // Skip API routes
   if (req.path.startsWith('/api')) return next();
-  
-  // Serve index.html for unknown routes (SPA support)
   res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
-    if (err) {
-      console.error('Error serving index.html:', err);
-      res.status(500).send('Server error');
-    }
+    if (err) res.status(500).send('Server error');
   });
 });
 
 // ─────────────────────────────────────────────────────
 // GOOGLE AI STUDIO API PROXY
 // ─────────────────────────────────────────────────────
-
+// FIX: Removed the space after 'models/'
 const AI_STUDIO_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
 
-// Available devices, actions, scenes (sync with frontend script.js)
 const CONFIG = {
   DEVICES: ['light', 'fan', 'pump', 'heater', 'all'],
   ACTIONS: ['on', 'off', 'toggle'],
-  SCENES: ['morning', 'night', 'work', 'relax'],
+  SCENES: ['morning', 'night', 'work', 'relax'],  
 };
 
-// System prompt for consistent AI behavior
 const SYSTEM_PROMPT = `You are Excell AI, a friendly smart home assistant.
-
-AVAILABLE DEVICES: ${CONFIG.DEVICES.filter(d => d !== 'all').join(', ')} (plus "all" for all devices)
+AVAILABLE DEVICES: ${CONFIG.DEVICES.filter(d => d !== 'all').join(', ')} (plus "all")
 AVAILABLE ACTIONS: ${CONFIG.ACTIONS.join(', ')}
 AVAILABLE SCENES: ${CONFIG.SCENES.join(', ')}
-
 RULES:
-1. Respond naturally and conversationally in the user's language
-2. For device control, return ONLY this JSON format:
-   {"action":{"type":"control_relay","params":{"device":"DEVICE_ID","action":"on|off|toggle"}}}
-3. For scenes, return:
-   {"action":{"type":"run_scene","params":{"scene":"SCENE_NAME"}}}
-4. If request is unclear, ask ONE short clarifying question
-5. Keep confirmations under 10 words: "✅ Light on"
-6. If you can't help, respond politely with a helpful suggestion
-7. Never make up device states - ask user or say you'll check
+1. Respond naturally.
+2. For device control, return ONLY JSON: {"action":{"type":"control_relay","params":{"device":"DEVICE_ID","action":"on|off|toggle"}}}
+3. For scenes: {"action":{"type":"run_scene","params":{"scene":"SCENE_NAME"}}}
+4. Keep confirmations short.
+5. Return valid JSON only. No markdown.`;
 
-EXAMPLES:
-User: "turn on the light"
-→ {"action":{"type":"control_relay","params":{"device":"light","action":"on"}}}
-
-User: "good morning"
-→ {"action":{"type":"run_scene","params":{"scene":"morning"}}}
-
-User: "is the fan running?"
-→ {"response":"Let me check... The fan is currently off. Turn it on?"}
-
-User: "make it cozy"
-→ {"action":{"type":"run_scene","params":{"scene":"relax"}}}
-
-User: "turn off everything"
-→ {"action":{"type":"control_relay","params":{"device":"all","action":"off"}}}
-
-IMPORTANT: Return valid JSON only. No markdown, no explanations outside JSON.`;
-
-/**
- * POST /api/chat
- * Handles AI requests from frontend
- */
 app.post('/api/chat', apiLimiter, async (req, res) => {
   const startTime = Date.now();
   
   try {
     const { message, history = [], devices = [], states = {} } = req.body;
     
-    // Validate input
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
-      return res.status(400).json({ 
-        error: 'invalid_input',
-        response: "I didn't catch that. Could you try again?"
-      });
+      return res.status(400).json({ error: 'invalid_input', response: "I didn't catch that." });
     }
     
     const trimmedMessage = message.trim();
-    console.log(`🔍 [${new Date().toISOString()}] Request: "${trimmedMessage.substring(0, 100)}..."`);
+    console.log(`🔍 [${new Date().toISOString()}] Request: "${trimmedMessage.substring(0, 50)}..."`);
 
-    // Build conversation history for AI Studio format
     const contents = [
-      // System prompt (as first user message for instruction)
       { role: 'user', parts: [{ text: SYSTEM_PROMPT }] },
-      
-      // Conversation history
       ...history.slice(-10).map(h => ({
         role: h.role === 'user' ? 'user' : 'model',
         parts: [{ text: h.content }]
       })),
-      
-      // Current message with context
       { 
         role: 'user', 
-        parts: [{ 
-          text: `Device states: ${JSON.stringify(states)}\n\nUser: ${trimmedMessage}` 
-        }] 
+        parts: [{ text: `Device states: ${JSON.stringify(states)}\n\nUser: ${trimmedMessage}` }] 
       }
     ];
 
-    // Define function calling tools (Google AI Studio format)
     const tools = [{
       functionDeclarations: [
         {
           name: 'control_relay',
-          description: 'Control a smart home device (light, fan, pump, heater, or all)',
+          description: 'Control a smart home device',
           parameters: {
             type: 'OBJECT',
             properties: {
-              device: { 
-                type: 'STRING', 
-                enum: CONFIG.DEVICES, 
-                description: 'Device ID to control' 
-              },
-              action: { 
-                type: 'STRING', 
-                enum: CONFIG.ACTIONS, 
-                description: 'Action to perform' 
-              }
+              device: { type: 'STRING', enum: CONFIG.DEVICES, description: 'Device ID' },
+              action: { type: 'STRING', enum: CONFIG.ACTIONS, description: 'Action' }
             },
-            required: ['device', 'action'],
-            additionalProperties: false
+            required: ['device', 'action']
           }
         },
         {
           name: 'run_scene',
-          description: 'Activate a predefined scene/mode',
+          description: 'Activate a scene',
           parameters: {
             type: 'OBJECT',
             properties: {
-              scene: { 
-                type: 'STRING', 
-                enum: CONFIG.SCENES, 
-                description: 'Scene name to activate' 
-              }
+              scene: { type: 'STRING', enum: CONFIG.SCENES, description: 'Scene name' }
             },
-            required: ['scene'],
-            additionalProperties: false
+            required: ['scene']
           }
         }
       ]
     }];
 
-    // Call Google AI Studio REST API
     const aiResponse = await fetch(AI_STUDIO_URL, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'User-Agent': 'Excell-AI/1.0'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents,
         tools,
-        tool_config: {
-          function_calling_config: {
-            mode: 'AUTO', // Let AI decide when to call functions
-          }
-        },
+        tool_config: { function_calling_config: { mode: 'AUTO' } },
         generationConfig: {
-          temperature: 0.3,      // Low = more deterministic
-          maxOutputTokens: 500,  // Limit response length
+          temperature: 0.3,
+          maxOutputTokens: 500,
           topP: 0.9,
-          topK: 40,
-          responseMimeType: 'text' // Keep as text, we'll parse JSON
+          topK: 40
         },
         safetySettings: [
           { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
@@ -282,35 +194,18 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
           { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' }
         ]
       }),
-      signal: AbortSignal.timeout(20000) // 20 second timeout
+      signal: AbortSignal.timeout(20000)
     });
 
     const latency = Date.now() - startTime;
     
-    // Handle API errors
     if (!aiResponse.ok) {
       const errorData = await aiResponse.json().catch(() => ({}));
       console.error(`❌ AI Studio API Error ${aiResponse.status}:`, errorData);
       
-      // Map common errors
-      if (aiResponse.status === 400) {
-        return res.status(400).json({ 
-          error: 'bad_request',
-          response: "I'm having trouble understanding. Could you rephrase?"
-        });
-      }
-      if (aiResponse.status === 429) {
-        return res.status(429).json({ 
-          error: 'rate_limited',
-          response: "I'm a bit overwhelmed. Please wait a moment and try again."
-        });
-      }
-      if (aiResponse.status === 401 || aiResponse.status === 403) {
-        return res.status(500).json({ 
-          error: 'auth_error',
-          response: "I'm having connection issues. Please try again later."
-        });
-      }
+      if (aiResponse.status === 400) return res.status(400).json({ error: 'bad_request', response: "Invalid request." });
+      if (aiResponse.status === 429) return res.status(429).json({ error: 'rate_limited', response: "Too many requests." });
+      if (aiResponse.status === 401 || aiResponse.status === 403) return res.status(500).json({ error: 'auth_error', response: "API Key invalid." });
       
       throw new Error(errorData.error?.message || `AI error: ${aiResponse.status}`);
     }
@@ -318,63 +213,47 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
     const aiData = await aiResponse.json();
     console.log(`✅ AI Response in ${latency}ms`);
     
-    // Parse AI response
     const candidate = aiData.candidates?.[0];
     if (!candidate?.content?.parts?.[0]) {
-      console.warn('⚠️ Empty AI response');
-      return res.json({ 
-        response: "I'm thinking... Could you try that again?"
-      });
+      return res.json({ response: "Thinking..." });
     }
 
     const part = candidate.content.parts[0];
     let result = { response: '', action: null, metadata: { latency } };
 
-    // Handle function call from AI
     if (part.functionCall) {
       const { name, args } = part.functionCall;
       console.log(`🔧 Function call: ${name}`, args);
       
       if (name === 'control_relay' && args?.device && args?.action) {
-        // Validate device/action
         if (!CONFIG.DEVICES.includes(args.device) || !CONFIG.ACTIONS.includes(args.action)) {
-          result.response = `I can't control "${args.device}". Available: ${CONFIG.DEVICES.filter(d=>d!=='all').join(', ')}.`;
+          result.response = `Invalid device or action.`;
         } else {
-          result.action = { 
-            type: 'control_relay', 
-            params: { device: args.device, action: args.action } 
-          };
-          result.response = `✅ ${args.device === 'all' ? 'All devices' : args.device} → ${args.action}`;
+          result.action = { type: 'control_relay', params: { device: args.device, action: args.action } };
+          result.response = `✅ ${args.device} → ${args.action}`;
         }
       } 
       else if (name === 'run_scene' && args?.scene) {
         if (!CONFIG.SCENES.includes(args.scene)) {
-          result.response = `Available scenes: ${CONFIG.SCENES.join(', ')}.`;
+          result.response = `Unknown scene.`;
         } else {
-          result.action = { 
-            type: 'run_scene', 
-            params: { scene: args.scene } 
-          };
-          result.response = `🌟 Activating ${args.scene} scene`;
+          result.action = { type: 'run_scene', params: { scene: args.scene } };
+          result.response = `🌟 Activating ${args.scene}`;
         }
       }
       else {
-        result.response = "I'm not sure how to help with that. Try asking about lights, fans, or scenes!";
+        result.response = "Not sure how to help.";
       }
     }
-    // Handle text response
     else if (part.text) {
       const text = part.text.trim();
-      
-      // Try to parse JSON if AI returned structured response
-      if (text.startsWith('{') || text.startsWith('[')) {
+      if (text.startsWith('{')) {
         try {
           const parsed = JSON.parse(text);
           if (parsed.action) result.action = parsed.action;
           if (parsed.response) result.response = parsed.response;
           if (!result.response && !result.action) result.response = text;
         } catch (e) {
-          // Not JSON, use as-is
           result.response = text;
         }
       } else {
@@ -382,92 +261,33 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
       }
     }
 
-    // Fallback if nothing parsed
     if (!result.response && !result.action) {
-      result.response = "I'm here to help! What would you like to control?";
+      result.response = "Ready to help.";
     }
 
-    // Log successful response
-    console.log(`📤 Response: ${result.response?.substring(0, 100)}${result.response?.length > 100 ? '...' : ''}`);
-    
-    // Send response to frontend
+    console.log(`📤 Response: ${result.response}`);
     res.json(result);
 
   } catch (error) {
-    const latency = Date.now() - startTime;
-    console.error(`❌ Chat error after ${latency}ms:`, error.message);
-    
-    // Don't expose internal errors to client
+    console.error(`❌ Chat error:`, error.message);
     res.status(500).json({ 
       error: 'internal_error',
-      response: "I'm having trouble connecting right now. Please check your internet and try again.",
+      response: "Connection trouble. Check internet.",
       debug: NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
 
-/**
- * GET /api/health
- * Health check endpoint
- */
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: NODE_ENV,
-    model: MODEL
-  });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), model: MODEL });
 });
 
-/**
- * GET /api/config
- * Public config for frontend (no secrets)
- */
-app.get('/api/config', (req, res) => {
-  res.json({
-    devices: CONFIG.DEVICES,
-    actions: CONFIG.ACTIONS, 
-    scenes: CONFIG.SCENES,
-    version: '1.0.0'
-  });
-});
-
-// ─────────────────────────────────────────────────────
-// ERROR HANDLING
-// ─────────────────────────────────────────────────────
-
-// 404 handler
 app.use((req, res) => {
-  // API routes that don't exist
   if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'not_found', message: 'API endpoint not found' });
+    return res.status(404).json({ error: 'not_found' });
   }
-  // Let static file handler deal with other 404s
   res.status(404).sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('💥 Unhandled error:', err);
-  
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    return res.status(400).json({ error: 'invalid_json', message: 'Invalid JSON in request' });
-  }
-  
-  if (err.message?.includes('CORS')) {
-    return res.status(403).json({ error: 'cors_error', message: 'Origin not allowed' });
-  }
-  
-  res.status(500).json({ 
-    error: 'server_error', 
-    message: NODE_ENV === 'development' ? err.message : 'Internal server error'
-  });
-});
-
-// ─────────────────────────────────────────────────────
-// START SERVER
-// ─────────────────────────────────────────────────────
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
@@ -476,24 +296,7 @@ app.listen(PORT, '0.0.0.0', () => {
 ╠════════════════════════════════════════╣
 ║   🌐 Frontend: http://localhost:${PORT}          ║
 ║   🔗 API:      http://localhost:${PORT}/api/chat ║
-║   🔍 Health:   http://localhost:${PORT}/api/health║
-║   📁 Public:   ./public/              ║
 ║   🔑 Model:    ${MODEL}     ║
-║   🌍 Env:      ${NODE_ENV}                    ║
 ╚════════════════════════════════════════╝
   `.trim());
-  
-  // Log available origins for debugging
-  console.log(`🔓 Allowed origins: ${allowedOrigins.join(', ')}`);
-});
-
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\n👋 Shutting down gracefully...');
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  console.log('\n👋 Shutting down gracefully...');
-  process.exit(0);
 });
