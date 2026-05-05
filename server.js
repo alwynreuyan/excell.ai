@@ -7,12 +7,14 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const API_KEY = process.env.GEMINI_API_KEY;
+
+// --- GROQ CONFIGURATION ---
+const API_KEY = process.env.GROQ_API_KEY; 
 const AUTH_TOKEN = process.env.AUTH_TOKEN;
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'llama-3.1-8b-instant'; // Groq's updated fast model
 
 if (!API_KEY) {
-  console.error('❌ CRITICAL: GEMINI_API_KEY not found in .env');
+  console.error('❌ CRITICAL: GROQ_API_KEY not found in .env');
   process.exit(1);
 }
 
@@ -23,7 +25,8 @@ app.use(helmet({
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-      connectSrc: ["'self'", "https://generativelanguage.googleapis.com", "http://192.168.1.100", "http://*.local"],
+      // Updated to allow Groq instead of Google
+      connectSrc: ["'self'", "https://api.groq.com", "http://192.168.1.100", "http://*.local"],
       imgSrc: ["'self'", "data:", "https:"],
     },
   },
@@ -100,45 +103,58 @@ OR if no device action needed:
 
 User message: ${message}`;
 
-    const geminiBody = {
-      contents: [{ parts: [{ text: systemPrompt }] }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 512,
-      },
+    // --- NEW GROQ API CALL ---
+    const groqBody = {
+      model: MODEL,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: message }
+      ],
+      response_format: { type: "json_object" }, // Guarantees pure JSON output
+      temperature: 0.3,
+      max_tokens: 512
     };
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(geminiBody),
-        signal: AbortSignal.timeout(15000),
-      }
-    );
+    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}` 
+      },
+      body: JSON.stringify(groqBody),
+      signal: AbortSignal.timeout(15000),
+    });
 
-    if (geminiRes.status === 400 || geminiRes.status === 403) {
-      return res.status(401).json({ error: 'Invalid Gemini API key or unauthorized.' });
+    if (groqRes.status === 401 || groqRes.status === 403) {
+      return res.status(401).json({ error: 'Invalid Groq API key or unauthorized.' });
     }
 
-    if (!geminiRes.ok) {
-      const errData = await geminiRes.json().catch(() => ({}));
-      console.error('Gemini error:', errData);
+    if (!groqRes.ok) {
+      const errData = await groqRes.json().catch(() => ({}));
+      console.error('Groq error:', errData);
+
+      if (groqRes.status === 429) {
+        console.warn('Groq API rate limit reached. Asking user to wait.');
+        return res.json({ 
+          action: null, 
+          response: "I'm receiving too many requests right now. Please wait about a minute and try again." 
+        });
+      }
+
       return res.status(502).json({ error: 'AI model error', details: errData });
     }
 
-    const geminiData = await geminiRes.json();
-    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const groqData = await groqRes.json();
+    const rawText = groqData?.choices?.[0]?.message?.content || '';
+    // -------------------------
 
-    // Strip markdown fences and parse JSON
+    // Strip markdown fences just in case (though response_format makes this rare)
     const cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
     let parsed;
     try {
       parsed = JSON.parse(cleaned);
     } catch {
-      // Best-effort: return raw text as response if JSON parse fails
       console.warn('JSON parse failed, raw:', cleaned);
       return res.json({ action: null, response: cleaned || 'I could not understand that. Please try again.' });
     }
@@ -164,6 +180,6 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`✅ Excell AI server running at http://localhost:${PORT}`);
-  console.log(`🤖 Model: ${MODEL}`);
+  console.log(`🤖 Model: ${MODEL} (Groq)`);
   console.log(`🔑 API key: ${API_KEY ? 'loaded' : 'MISSING'}`);
 });

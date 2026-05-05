@@ -468,61 +468,49 @@ function toggleListening() {
     alert('Mic access denied. Check Chrome Settings → Site Settings → Microphone.');
     return;
   }
-  if (listening) stopListening(); else startListening();
+  if (micPermission === 'unknown') {
+    requestMicPermission().then(() => {
+      if (micPermission === 'granted') toggleListening();
+    });
+    return;
+  }
+  if (listening) {
+    stopListening();
+  } else {
+    // Stop wake word before manual mic tap
+    if (wakeListening) stopWakeWordListening();
+    startCommandMode();
+  }
 }
 
 function startListening() {
-  if (wakeListening) { try{wakeRecognition.stop();}catch{} }
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { setStatus('Speech API not supported — use Chrome','err'); return; }
+  if (wakeListening) stopWakeWordListening();
+  startCommandMode();
+}
 
-  recognition = new SR();
-  recognition.continuous = settings.continuousVoice;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
-
-  recognition.onstart = () => {
-    listening = true;
-    const btn = document.getElementById('mic-btn');
-    const lbl = document.getElementById('mic-label');
-    const dot = document.getElementById('mic-live-dot');
-
-    if(btn) btn.classList.add('listening');
-    if(lbl) lbl.textContent = 'LISTENING…';
-    if(dot) dot.classList.add('active');
-
-    setStatus('Listening…', 'info');
-    startMicSpectrum();
-  };
-
-  recognition.onresult = (e) => {
-    const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ').toLowerCase().trim();
-    const tBox = document.getElementById('transcript-display-text');
-    const isFinal = e.results[e.results.length-1].isFinal;
-
-    if(tBox) {
-      tBox.textContent = `"${transcript}"`;
-      tBox.classList.toggle('interim', !isFinal);
-    }
-
-    if (isFinal) {
-      log('voice', `Heard: "${transcript}"`);
-      processWithAI(transcript);
-    }
-  };
-
-  recognition.onerror = (e) => {
-    setStatus(`Voice error: ${e.error}`,'err');
-    log('err', e.error);
+function toggleListening() {
+  if (micPermission === 'denied') {
+    alert('Mic access denied. Check Chrome Settings → Site Settings → Microphone.');
+    return;
+  }
+  if (micPermission === 'unknown') {
+    requestMicPermission().then(() => {
+      if (micPermission === 'granted') toggleListening();
+    });
+    return;
+  }
+  if (listening) {
     stopListening();
-  };
+  } else {
+    // Stop wake word before manual mic tap
+    if (wakeListening) stopWakeWordListening();
+    startCommandMode();
+  }
+}
 
-  recognition.onend = () => {
-    if(settings.continuousVoice && listening) recognition.start();
-    else stopListening();
-  };
-
-  try { recognition.start(); } catch(e) { listening=false; stopMicSpectrum(); }
+function startListening() {
+  if (wakeListening) stopWakeWordListening();
+  startCommandMode();
 }
 
 function stopListening() {
@@ -556,48 +544,67 @@ function stopListening() {
 // WAKE WORD
 // ─────────────────────────────────────────────────────
 function startWakeWordListening() {
-  if (wakeListening) return;
+  if (wakeListening || listening) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return;
+  if (!SR) { log('err', 'Speech API not supported — use Chrome'); return; }
 
   wakeRecognition = new SR();
   wakeRecognition.continuous = true;
   wakeRecognition.interimResults = true;
   wakeRecognition.lang = 'en-US';
+  wakeRecognition.maxAlternatives = 3;
 
   wakeRecognition.onstart = () => {
     wakeListening = true;
-    const banner = document.getElementById('wake-banner');
-    const btn = document.getElementById('mic-btn');
     const lbl = document.getElementById('mic-label');
-
+    const btn = document.getElementById('mic-btn');
+    const banner = document.getElementById('wake-banner');
+    if(lbl) lbl.textContent = '👂 WAKE WORD ACTIVE';
+    if(btn) { btn.classList.remove('listening'); btn.classList.add('wake-standby'); }
     if(banner) banner.classList.add('visible');
-    if(btn) btn.classList.add('wake-standby');
-    if(lbl) lbl.textContent = 'WAKE WORD ACTIVE';
-
     log('wake', `Listening for: "${settings.wakeWord}"`);
   };
 
   wakeRecognition.onresult = (e) => {
     if (listening) return;
-    const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ').toLowerCase().trim();
-    if (transcript.includes(settings.wakeWord.toLowerCase())) onWakeDetected();
+    // Check ALL alternatives from ALL results for best wake word detection
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      for (let j = 0; j < e.results[i].length; j++) {
+        const t = e.results[i][j].transcript.toLowerCase().trim();
+        if (t.includes(settings.wakeWord.toLowerCase())) {
+          log('wake', `Detected: "${t}"`);
+          onWakeDetected();
+          return;
+        }
+      }
+    }
   };
 
   wakeRecognition.onerror = (e) => {
-    if (e.error!=='no-speech' && e.error!=='aborted') {
-      log('err', `Wake error: ${e.error}`);
-      wakeListening = false;
-      if (settings.wakeEnabled) setTimeout(startWakeWordListening, 1500);
+    wakeListening = false;
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      log('err', 'Mic blocked — check browser permissions');
+      return;
+    }
+    // Restart on recoverable errors
+    if (settings.wakeEnabled && !listening) {
+      setTimeout(startWakeWordListening, 1000);
     }
   };
 
   wakeRecognition.onend = () => {
     wakeListening = false;
-    if (settings.wakeEnabled && !listening) setTimeout(startWakeWordListening, 300);
+    if (settings.wakeEnabled && !listening) {
+      setTimeout(startWakeWordListening, 300);
+    }
   };
 
-  try { wakeRecognition.start(); } catch { wakeListening = false; }
+  try {
+    wakeRecognition.start();
+  } catch(e) {
+    wakeListening = false;
+    log('err', 'Wake start failed: ' + e.message);
+  }
 }
 
 function stopWakeWordListening() {
@@ -613,16 +620,31 @@ function stopWakeWordListening() {
 }
 
 function onWakeDetected() {
-  if (wakeRecognition) { try{wakeRecognition.stop();}catch{} }
+  // Stop wake listener cleanly
+  if (wakeRecognition) {
+    wakeRecognition.onend = null;
+    wakeRecognition.onresult = null;
+    wakeRecognition.onerror = null;
+    try { wakeRecognition.abort(); } catch(e) {}
+    wakeRecognition = null;
+  }
   wakeListening = false;
-  log('wake', 'Wake word detected!');
-  setStatus('🎙 Speak your command…', 'ok');
-  showAIResponse('Listening…');
-  speakResponse('Yes?');
-  startCommandMode();
-}
 
+  const banner = document.getElementById('wake-banner');
+  const tBox = document.getElementById('transcript-display-text');
+  if(banner) banner.classList.remove('visible');
+  if(tBox) tBox.textContent = '👂 Speak your command…';
+
+  log('wake', '✅ Wake word detected — entering command mode');
+  setStatus('🎙 Speak your command…', 'ok');
+
+  // Short audio feedback then start listening
+  speakResponse('Yes?');
+  setTimeout(startCommandMode, 600);
+}
 function startCommandMode() {
+  if (listening) return;
+
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return;
 
@@ -630,53 +652,92 @@ function startCommandMode() {
   recognition.continuous = false;
   recognition.interimResults = true;
   recognition.lang = 'en-US';
+  recognition.maxAlternatives = 3;
+
   listening = true;
 
   const btn = document.getElementById('mic-btn');
   const lbl = document.getElementById('mic-label');
   const dot = document.getElementById('mic-live-dot');
+  const tBox = document.getElementById('transcript-display-text');
 
-  if(btn) btn.classList.add('listening');
-  if(lbl) lbl.textContent = 'LISTENING…';
+  if(btn) { btn.classList.remove('wake-standby'); btn.classList.add('listening'); }
+  if(lbl) lbl.textContent = '🎙 LISTENING…';
   if(dot) dot.classList.add('active');
+  if(tBox) tBox.textContent = '…';
 
   startMicSpectrum();
+  setStatus('Listening for command…', 'info');
 
-  const timeout = setTimeout(() => {
-    if (listening) { try{recognition.stop();}catch{} resetToWake(); }
-  }, 5000);
+  let finalSent = false;
+  let silenceTimer = null;
 
   recognition.onresult = (e) => {
-    const transcript = Array.from(e.results).map(r=>r[0].transcript).join(' ').toLowerCase().trim();
-    const tBox = document.getElementById('transcript-display-text');
-    const isFinal = e.results[e.results.length-1].isFinal;
+    let interimText = '';
+    let finalText = '';
 
-    if(tBox) {
-      tBox.textContent = `"${transcript}"`;
-      tBox.classList.toggle('interim', !isFinal);
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += t;
+      else interimText += t;
     }
 
-    if (isFinal) {
-      clearTimeout(timeout);
-      log('voice', `Command: "${transcript}"`);
-      processWithAI(transcript);
+    const display = (finalText || interimText).toLowerCase().trim();
+    if(tBox) { tBox.textContent = `"${display}"`; tBox.classList.toggle('interim', !finalText); }
+
+    // Clear previous silence timer on each new word
+    clearTimeout(silenceTimer);
+
+    if (finalText && !finalSent) {
+      finalSent = true;
+      const cmd = finalText.toLowerCase().trim();
+      log('voice', `Command: "${cmd}"`);
+      processWithAI(cmd);
+      return;
+    }
+
+    // Auto-send after 1.5s silence if no final result yet
+    if (interimText && !finalSent) {
+      silenceTimer = setTimeout(() => {
+        if (!finalSent && interimText.trim().length > 1) {
+          finalSent = true;
+          const cmd = interimText.toLowerCase().trim();
+          log('voice', `Auto-send: "${cmd}"`);
+          try { recognition.stop(); } catch(e) {}
+          processWithAI(cmd);
+        }
+      }, 1500);
     }
   };
 
   recognition.onerror = (e) => {
-    clearTimeout(timeout);
-    setStatus(`Error: ${e.error}`,'err');
-    resetToWake();
-  };
-
-  recognition.onend = () => {
-    clearTimeout(timeout);
-    listening=false;
+    clearTimeout(silenceTimer);
+    if (e.error !== 'aborted' && e.error !== 'no-speech') {
+      log('err', `Recognition error: ${e.error}`);
+      setStatus(`Error: ${e.error}`, 'err');
+    }
+    listening = false;
     stopMicSpectrum();
     resetToWake();
   };
 
-  try { recognition.start(); } catch { listening=false; stopMicSpectrum(); resetToWake(); }
+  recognition.onend = () => {
+    clearTimeout(silenceTimer);
+    listening = false;
+    if(dot) dot.classList.remove('active');
+    if(tBox) tBox.classList.remove('interim');
+    stopMicSpectrum();
+    resetToWake();
+  };
+
+  try {
+    recognition.start();
+  } catch(e) {
+    listening = false;
+    stopMicSpectrum();
+    log('err', 'Command mode start failed: ' + e.message);
+    resetToWake();
+  }
 }
 
 function resetToWake() {
@@ -801,8 +862,18 @@ function onContinuousToggle(v) { settings.continuousVoice = v; if(!v && listenin
 function onWakeToggle(v) {
   settings.wakeEnabled = v;
   saveSettings();
-  if(v) startWakeWordListening();
-  else stopWakeWordListening();
+  if (v) {
+    // Need mic permission first
+    if (micPermission !== 'granted') {
+      requestMicPermission().then(() => {
+        if (micPermission === 'granted') startWakeWordListening();
+      });
+    } else {
+      startWakeWordListening();
+    }
+  } else {
+    stopWakeWordListening();
+  }
   updateStatsRow();
   syncSettingsUI();
 }
@@ -835,12 +906,17 @@ function setStatus(msg, cls) {
   const el = document.getElementById('status-text');
   if(el) { el.textContent = msg; el.className = cls||''; }
 }
-
 function showAIResponse(msg) {
+  // 1. Always log the response first, so it never silently vanishes
+  log('ai', msg.substring(0,80)+(msg.length>80?'…':'')); 
+  
+  // 2. Then try to update the UI text area
   const el = document.getElementById('ai-response-text');
-  if(!el) return;
+  if(!el) {
+    console.warn("⚠️ UI Warning: Could not find 'ai-response-text' in your HTML!");
+    return;
+  }
   el.textContent = msg;
-  log('ai', msg.substring(0,80)+(msg.length>80?'…':''));
 }
 
 function log(type, msg) {
@@ -917,10 +993,11 @@ function closeRelayModal() {
 function buildPinGrid(cur) {
   const grid = document.getElementById('pin-grid');
   if(!grid) return;
-  const used=relays.map(r=>r.pin).filter(p=>p!==undefined);
-  grid.innerHTML=ESP32_PINS.map(p=>{
-    const usedPin=used.includes(p)&&p!==cur, sel=p===cur||p===selectedPin;
-    return `<div class="pin-opt ${usedPin?'used':''} ${sel?'selected':''}" onclick="${usedPin?'':'selectPin('+p+')'}">GPIO<br>${p}</div>`;
+  const used = relays.map(r => r.pin).filter(p => p !== undefined);
+  grid.innerHTML = ESP32_PINS.map(p => {
+    const usedPin = used.includes(p) && p !== cur;
+    const sel = p === cur || p === selectedPin;
+    return `<div class="pin-opt ${usedPin?'used':''} ${sel?'selected':''}" data-pin="${p}" data-used="${usedPin}">GPIO<br>${p}</div>`;
   }).join('');
 }
 
@@ -934,9 +1011,9 @@ function selectPin(p) {
 function buildEmojiPicker(cur) {
   const picker = document.getElementById('modal-emoji-picker');
   if(!picker) return;
-  selectedEmoji=cur||'💡';
-  picker.innerHTML=EMOJI_OPTIONS.map(e=>
-    `<span class="emoji-opt ${e===selectedEmoji?'selected':''}" onclick="selectEmoji('${e}')">${e}</span>`
+  selectedEmoji = cur || '💡';
+  picker.innerHTML = EMOJI_OPTIONS.map(e =>
+    `<span class="emoji-opt ${e===selectedEmoji?'selected':''}" data-emoji="${e}">${e}</span>`
   ).join('');
 }
 
@@ -1191,7 +1268,20 @@ window.applyTheme = applyTheme;
         if(chk) onToggle(chk.dataset.toggleId, chk.checked);
       });
     }
+  // Pin grid delegation
+      on('pin-grid', 'click', function(e){
+        var opt = e.target.closest('.pin-opt');
+        if(!opt) return;
+        if(opt.dataset.used === 'true') return;
+        selectPin(Number(opt.dataset.pin));
+      });
 
+      // Emoji picker delegation
+      on('modal-emoji-picker', 'click', function(e){
+        var opt = e.target.closest('.emoji-opt');
+        if(!opt) return;
+        selectEmoji(opt.dataset.emoji);
+      });
     // Quick chips delegation
     on('quick-chips', 'click', function(e){
       var chip = e.target.closest('.chip');
