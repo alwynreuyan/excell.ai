@@ -214,8 +214,7 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
                 description: 'Action to perform' 
               }
             },
-            required: ['device', 'action'],
-            additionalProperties: false
+            required: ['device', 'action']
           }
         },
         {
@@ -230,8 +229,7 @@ app.post('/api/chat', apiLimiter, async (req, res) => {
                 description: 'Scene name to activate' 
               }
             },
-            required: ['scene'],
-            additionalProperties: false
+            required: ['scene']
           }
         }
       ]
