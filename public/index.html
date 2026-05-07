@@ -157,7 +157,28 @@
 
       <div class="section-title">// RELAY CONTROLS</div>
       <div class="relays-grid" id="relays-grid"></div>
-
+<!-- ========== RADIO PLAYER SECTION ========== -->
+<div id="radio-section" class="radio-section" style="display:none;">
+  <div class="section-title">📻 INTERNET RADIO</div>
+  <div class="radio-controls">
+    <select id="radio-station-select" class="form-select" style="flex:1;">
+      <option value="">-- Choose a station --</option>
+      <option value="https://ice.somafm.com/groovesalad-128-mp3">SomaFM: Groove Salad</option>
+      <option value="https://ice.somafm.com/dronezone-128-mp3">SomaFM: Drone Zone</option>
+      <option value="https://ice.somafm.com/spacestation-128-mp3">SomaFM: Space Station</option>
+      <option value="http://stream.live.vc.bbcmedia.co.uk/bbc_radio_one">BBC Radio 1</option>
+      <option value="http://stream.live.vc.bbcmedia.co.uk/bbc_radio_two">BBC Radio 2</option>
+    </select>
+    <button id="radio-play-btn" class="rbtn">▶ Play</button>
+    <button id="radio-pause-btn" class="rbtn">⏸ Pause</button>
+    <button id="radio-next-btn" class="rbtn">⏭ Next</button>
+    <button id="radio-voice-btn" class="rbtn">🎤 Voice</button>
+  </div>
+  <div style="margin-top:8px;font-family:var(--mono);font-size:.7rem;">
+    Now playing: <span id="radio-now-playing" style="color:var(--accent);">–</span>
+  </div>
+</div>
+<!-- ============================================= -->
       <div class="all-ctrl">
         <button class="all-btn all-on" data-cmd="all" data-state="on">▶ ALL ON</button>
         <button class="all-btn all-off" data-cmd="all" data-state="off">■ ALL OFF</button>

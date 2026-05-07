@@ -1329,3 +1329,32 @@ on('wake-tags-list', 'click', function(e){
     init();
   }
 })();
+let radioPlayer = new Audio();
+let radioStationIndex = 0;
+function playRadio() {
+  const sel = document.getElementById('radio-station-select');
+  if (!sel || sel.selectedIndex === 0) return;
+  radioPlayer.src = sel.value;
+  radioPlayer.play().catch(e => log('err','Radio play failed: '+e.message));
+  document.getElementById('radio-now-playing').textContent = sel.options[sel.selectedIndex].text;
+  log('radio', 'Now playing: ' + sel.options[sel.selectedIndex].text);
+}
+
+function pauseRadio() {
+  radioPlayer.pause();
+  document.getElementById('radio-now-playing').textContent = '–';
+}
+
+function nextRadioStation() {
+  const sel = document.getElementById('radio-station-select');
+  if (!sel) return;
+  let idx = sel.selectedIndex + 1;
+  if (idx >= sel.options.length) idx = 1; // skip empty first
+  sel.selectedIndex = idx;
+  playRadio();
+}
+
+function toggleRadioPanel(show = true) {
+  const panel = document.getElementById('radio-section');
+  if (panel) panel.style.display = show ? 'block' : 'none';
+}
